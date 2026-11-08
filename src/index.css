@@ -974,6 +974,28 @@ html[data-theme='dark'] .owner-label { color:#93aeff; }
 html[data-theme='dark'] .about-principle:hover,
 html[data-theme='dark'] .owner-profile-card:hover { border-color:#5f83ff; }
 
+/* Keep the customer sign-in card readable as a single surface in both themes. */
+html[data-theme='dark'] .auth-glass-card {
+  border-color:rgba(148,163,184,.26);
+  border-top-color:rgba(191,208,255,.48);
+  background:linear-gradient(145deg,rgba(17,28,46,.96),rgba(11,18,32,.94));
+  color:#e2e8f0;
+  box-shadow:0 34px 90px -38px rgba(0,0,0,.72),inset 0 1px rgba(255,255,255,.08);
+}
+html[data-theme='dark'] .auth-card-heading h2 { color:#f8fafc; }
+html[data-theme='dark'] .auth-card-heading p,
+html[data-theme='dark'] .auth-form .form-label { color:#cbd5e1; }
+html[data-theme='dark'] .auth-mode-icon { border-color:#33445e; background:#1b2b48; color:#a9beff; }
+html[data-theme='dark'] .auth-form .form-control { border-color:#3b4e6c; background:#0b1526; color:#f8fafc; }
+html[data-theme='dark'] .auth-form .form-control::placeholder { color:#94a3b8; }
+html[data-theme='dark'] .auth-form .form-control:focus { border-color:#7895ff; background:#0d192c; box-shadow:0 0 0 4px rgba(3,65,252,.22); }
+html[data-theme='dark'] .auth-password-toggle { color:#cbd5e1; }
+html[data-theme='dark'] .auth-password-toggle:hover { background:#1b2b48; color:#c5d4ff; }
+html[data-theme='dark'] .auth-switch { border-color:rgba(148,163,184,.22); color:#aebbd0; }
+html[data-theme='dark'] .auth-forgot button,
+html[data-theme='dark'] .auth-text-button,
+html[data-theme='dark'] .auth-switch button { color:#9db4ff; }
+
 /* The active route stays unmistakable; hover uses the same Nexxa blue treatment. */
 .nav-link {
   position:relative;
@@ -1096,4 +1118,45 @@ html[data-theme='dark'] .filter-pill { border-color:#33445e; background:#111c2e;
 html[data-theme='dark'] .filter-pill:hover { border-color:#5f83ff; background:#17243a; color:#c5d4ff; }
 html[data-theme='dark'] .filter-pill.active { border-color:#0341fc; background:#0341fc; color:#fff; }
 html[data-theme='dark'] .service-tag { background:#1b2b48; color:#b9caff; }
+
+/* Phone-sized layouts: avoid page-wide horizontal scroll and preserve comfortable controls. */
+@media (max-width: 640px) {
+  html, body, #root { min-width:320px; width:100%; }
+  body { overflow-x:hidden; }
+  .container-shell { padding-inline:1rem; }
+  .site-header .container-shell { height:64px; gap:.75rem; }
+  .site-header .container-shell > a img { max-width:158px; height:48px; }
+  .site-header .icon-button { width:2.75rem; height:2.75rem; }
+  #mobile-navigation { padding-inline:1rem; padding-bottom:1rem; }
+  .mobile-nav-link { min-height:44px; }
+  .page-title { font-size:clamp(1.8rem,8vw,2.35rem); overflow-wrap:anywhere; }
+  .lead { font-size:1rem; }
+  .form-panel, .summary-panel { min-width:0; padding:1rem; }
+  .form-control { min-height:2.85rem; font-size:16px; }
+  .btn-primary, .btn-outline, .btn-white, .btn-glass { min-height:44px; }
+  .data-table { min-width:600px; }
+  .admin-shell, .admin-layout { max-width:100vw; overflow-x:hidden; }
+  .admin-topbar { gap:.5rem; }
+  .admin-topbar > * { min-width:0; }
+  .admin-panel { min-width:0; padding:1rem; }
+  .auth-inner { padding-inline:1rem; }
+  .auth-story-copy { padding:1.35rem 0 .8rem; }
+  .auth-story-copy h1 { font-size:clamp(2rem,10vw,2.8rem); }
+  .auth-benefits { display:none; }
+  .auth-glass-card { padding:1.15rem; }
+  .auth-card-heading { gap:.7rem; margin-bottom:1.15rem; }
+  .auth-form { gap:.85rem; }
+  .auth-form .form-label { display:block; margin-bottom:.4rem; font-size:.82rem; }
+  .auth-form .form-control { min-height:3rem; font-size:16px; }
+  .auth-submit { width:100%; min-height:3.15rem; }
+  .auth-alert-error, .auth-alert-success { overflow-wrap:anywhere; }
+  .footer-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 380px) {
+  .container-shell { padding-inline:.85rem; }
+  .auth-inner { padding-inline:.85rem; }
+  .auth-story-copy h1 { font-size:2rem; }
+  .auth-glass-card { padding:1rem; }
+  .footer-grid { grid-template-columns:1fr; }
+}
 @media (prefers-reduced-motion: reduce) { .theme-toggle { transition:none; } }
