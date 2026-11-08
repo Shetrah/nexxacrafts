@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { CartItem } from '../context/CartContext';
 
-export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; }
+export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; notificationSent?: boolean; }
 const DEMO_KEYS = { quotes: 'nexxacrafts-demo-quotes', orders: 'nexxacrafts-demo-orders' };
 // Tracking works with a reference alone, so new references need a high-entropy random suffix.
 const makeReference = (prefix: string) => `${prefix}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
@@ -11,13 +11,22 @@ const writeDemo = (key: string, row: unknown) => localStorage.setItem(key, JSON.
 export async function submitQuote(input: { name: string; email: string; phone: string; company?: string; serviceSlug: string; description: string; configuration: Record<string, unknown>; }): Promise<RequestResult> {
   const reference = makeReference('NCQ');
   if (supabase) {
-    const { data, error } = await supabase.from('quote_requests').insert({
-      reference, customer_id: (await supabase.auth.getUser()).data.user?.id || null, customer_name: input.name, email: input.email, phone: input.phone || null,
-      company: input.company || null, service_slug: input.serviceSlug, description: input.description,
-      configuration: input.configuration, status: 'submitted',
-    }).select('id, reference').single();
-    if (error) throw error;
-    return { id: data.id, reference: data.reference, mode: 'live' };
+    const { data, error } = await supabase.functions.invoke('contact-email', {
+      body: { kind: 'quote', reference, ...input },
+    });
+    if (error) {
+      let message = error.message;
+      try {
+        const response = (error as typeof error & { context?: Response }).context;
+        if (response) {
+          const details = await response.clone().json();
+          if (typeof details?.error === 'string') message = details.error;
+        }
+      } catch { /* Keep the invocation error if the function returned no JSON detail. */ }
+      throw new Error(message || 'Unable to submit your quotation request.');
+    }
+    if (!data?.id || !data?.reference) throw new Error('Your request could not be saved. Please try again.');
+    return { id: data.id, reference: data.reference, mode: 'live', notificationSent: data.notificationSent === true };
   }
   const id = crypto.randomUUID();
   writeDemo(DEMO_KEYS.quotes, { id, reference, ...input, status: 'submitted', created_at: new Date().toISOString() });

@@ -16,7 +16,7 @@ const ContactSection: React.FC = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [emailNoticeSent, setEmailNoticeSent] = useState<boolean | null>(null);
   const [submitError, setSubmitError] = useState('');
-  const [website, setWebsite] = useState('');
+  const [contactCheck, setContactCheck] = useState('');
   const serviceOptions = [...services.map((service) => service.name), 'I’m not sure yet'];
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(settings.location)}`;
 
@@ -36,16 +36,19 @@ const ContactSection: React.FC = () => {
         body: {
           ...formData,
           name: formData.name.trim(), email: formData.email.trim(), phone: formData.phone.trim(),
-          message: formData.message.trim(), website,
+          message: formData.message.trim(), contactCheck,
         },
       });
       if (error) throw error;
+      if (data?.ignored) throw new Error('We could not verify this submission. Please refresh the page and try again.');
       setEmailNoticeSent(data?.notificationSent === true);
       setSubmitSuccess(true);
       setFormData(initialFormData);
-      setWebsite('');
-    } catch {
-      setSubmitError('We couldn’t send your enquiry just now. Please try again, or reach us using the phone and email details.');
+      setContactCheck('');
+    } catch (error) {
+      setSubmitError(error instanceof Error && error.message.includes('verify this submission')
+        ? error.message
+        : 'We couldn’t send your enquiry just now. Please try again, or reach us using the phone and email details.');
     } finally {
       setIsSubmitting(false);
     }
@@ -65,7 +68,7 @@ const ContactSection: React.FC = () => {
         {submitSuccess&&<div role="status" aria-live="polite" className="contact-success mt-6"><CheckCircle2 size={20}/><div><p className="font-bold">Your enquiry has been received.</p><p className="mt-1 text-sm">{emailNoticeSent ? 'We’ll follow up using the contact details you provided.' : 'Your request was saved, but our email alert could not be sent. We’ll follow up using the contact details you provided.'}</p></div></div>}
         {submitError&&<div role="alert" className="contact-error mt-6">{submitError}</div>}
         <form onSubmit={handleSubmit} className="mt-7 space-y-5">
-          <div aria-hidden="true" className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"><label htmlFor="website">Leave this field empty</label><input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)}/></div>
+          <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-auto h-px w-px overflow-hidden"><label htmlFor="contact-reference-check">Leave this field empty</label><input id="contact-reference-check" name="contact_reference_check" type="text" tabIndex={-1} autoComplete="new-password" value={contactCheck} onChange={(event) => setContactCheck(event.target.value)}/></div>
           <div className="grid gap-5 sm:grid-cols-2"><div><label htmlFor="name" className="form-label">Full name <span aria-hidden="true">*</span></label><input autoComplete="name" type="text" id="name" name="name" value={formData.name} onChange={handleChange} required maxLength={120} placeholder="Your name" className="form-control"/></div><div><label htmlFor="email" className="form-label">Email address <span aria-hidden="true">*</span></label><input autoComplete="email" type="email" id="email" name="email" value={formData.email} onChange={handleChange} required maxLength={254} placeholder="you@example.com" className="form-control"/></div><div><label htmlFor="phone" className="form-label">Phone number</label><input autoComplete="tel" type="tel" id="phone" name="phone" value={formData.phone} onChange={handleChange} maxLength={40} placeholder="+254…" className="form-control"/></div><div><label htmlFor="service" className="form-label">Service you’re interested in <span aria-hidden="true">*</span></label><select id="service" name="service" value={formData.service} onChange={handleChange} required className="form-control"><option value="" disabled>Select a service</option>{serviceOptions.map((service)=><option key={service} value={service}>{service}</option>)}</select></div></div>
           <div><div className="mb-1 flex items-center justify-between gap-3"><label htmlFor="message" className="form-label !mb-0">Project details <span aria-hidden="true">*</span></label><span className="text-xs text-slate-400">{formData.message.length}/2000</span></div><textarea id="message" name="message" rows={6} value={formData.message} onChange={handleChange} required minLength={10} maxLength={2000} placeholder="What are you hoping to create? Include key sizes, quantities, timing or any details you already know." className="form-control min-h-36 resize-y"/></div>
           <div className="flex flex-col gap-4 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="max-w-sm text-xs leading-5 text-slate-500">By sending this request, you agree that nexxacrafts may contact you about this enquiry.</p><button type="submit" disabled={isSubmitting} className="btn-primary btn-lg shrink-0 disabled:cursor-not-allowed disabled:opacity-60"><Send size={16}/>{isSubmitting?'Sending…':'Send enquiry'}</button></div>

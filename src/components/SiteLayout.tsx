@@ -13,6 +13,17 @@ const SiteLayout: React.FC = () => {
   const { count } = useCart();
   const settings = useCompanySettings();
   const location = useLocation();
+  const routeTransition = location.pathname === '/'
+    ? 'home'
+    : location.pathname.startsWith('/services') ? 'services'
+      : location.pathname.startsWith('/order/') ? 'order'
+        : location.pathname.startsWith('/portfolio') ? 'portfolio'
+          : location.pathname.startsWith('/about') ? 'about'
+            : location.pathname.startsWith('/contact') ? 'contact'
+              : location.pathname.startsWith('/quote') ? 'quote'
+                : location.pathname.startsWith('/track') ? 'track'
+                  : location.pathname.startsWith('/account') ? 'account'
+                    : 'default';
   const links = [['Services', '/services'], ['Portfolio', '/portfolio'], ['About', '/about'], ['Contact', '/contact']];
   return <div className="min-h-screen flex flex-col bg-white text-slate-900">
     <div className="bg-slate-950 text-slate-200 text-xs py-2"><div className="container-shell flex justify-between gap-3"><span>{settings.tagline}</span><span className="hidden sm:block">{settings.phone} · {settings.public_email}</span></div></div>
@@ -34,9 +45,9 @@ const SiteLayout: React.FC = () => {
         </div>
         <button className="lg:hidden icon-button" onClick={() => setOpen(!open)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="mobile-navigation">{open ? <X/> : <Menu/>}</button>
       </div>
-      {open && <div id="mobile-navigation" className="lg:hidden border-t border-slate-100 bg-white px-5 py-4 space-y-1">{links.map(([label,to]) => <NavLink onClick={() => setOpen(false)} key={to} to={to} className="block rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50">{label}</NavLink>)}<NavLink onClick={() => setOpen(false)} to="/track" className="flex items-center gap-2 rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50"><PackageSearch size={17}/>Track order</NavLink><div className="flex items-center justify-between border-t border-line pt-3 mt-2"><span className="text-sm font-semibold text-slate-600">Appearance</span><ThemeToggle /></div><div className="flex gap-2 border-t border-line pt-3 mt-2"><Link onClick={() => setOpen(false)} to="/account" className="btn-outline flex-1">My account</Link><Link onClick={() => setOpen(false)} to="/cart" className="btn-primary flex-1">Cart ({count})</Link></div><Link onClick={() => setOpen(false)} to="/services" className="btn-primary w-full">Start an order <ArrowUpRight size={16}/></Link></div>}
+      {open && <div id="mobile-navigation" className="lg:hidden border-t border-slate-100 bg-white px-5 py-4 space-y-1">{links.map(([label,to]) => <NavLink onClick={() => setOpen(false)} key={to} to={to} className={({isActive}) => `mobile-nav-link ${isActive ? 'active' : ''}`}>{label}</NavLink>)}<NavLink onClick={() => setOpen(false)} to="/track" className={({isActive}) => `mobile-nav-link ${isActive ? 'active' : ''}`}><PackageSearch size={17}/>Track order</NavLink><div className="flex items-center justify-between border-t border-line pt-3 mt-2"><span className="text-sm font-semibold text-slate-600">Appearance</span><ThemeToggle /></div><div className="flex gap-2 border-t border-line pt-3 mt-2"><Link onClick={() => setOpen(false)} to="/account" className="btn-outline flex-1">My account</Link><Link onClick={() => setOpen(false)} to="/cart" className="btn-primary flex-1">Cart ({count})</Link></div><Link onClick={() => setOpen(false)} to="/services" className="btn-primary w-full">Start an order <ArrowUpRight size={16}/></Link></div>}
     </header>
-    <main className="flex-1"><div key={location.pathname} className="site-route-transition"><Outlet/></div></main>
+    <main className="flex-1"><div key={location.pathname} className={`site-route-transition route-transition-${routeTransition}`}><Outlet/></div></main>
     <footer className="site-footer">
       <div className="footer-topline"/><div className="container-shell py-10 md:py-14"><div className="footer-cta"><div><span className="footer-eyebrow">HAVE A PROJECT IN MIND?</span><h2 className="mt-2 text-2xl font-extrabold text-slate-950 md:text-3xl">Let’s make your next idea real.</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">Tell us what you’re working on. We’ll help you find a clear route from brief to finished work.</p></div></div>
         <div className="footer-grid"><div className="footer-brand"><Link to="/" aria-label={`${settings.business_name} home`}><Logo tone="inverse" className="h-12 w-auto" title={settings.business_name}/></Link><p className="mt-4 max-w-sm text-sm leading-6 text-slate-600">{settings.tagline}. Digital development, design, print, branding and custom fabrication for teams across Kenya.</p><p className="mt-3 text-xs font-semibold text-slate-500">{company.serviceArea}</p><div className="mt-5 flex gap-2">{company.socials.map((social)=><a key={social.label} href={social.href} target="_blank" rel="noreferrer" className="footer-social" aria-label={social.label}>{social.label === 'Facebook' ? 'f' : social.label === 'X (Twitter)' ? '𝕏' : '↗'}</a>)}</div></div>
