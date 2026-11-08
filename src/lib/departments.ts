@@ -26,8 +26,8 @@ export const DEPARTMENTS: readonly DepartmentInfo[] = [
   {
     id: 'printing',
     label: 'Printing',
-    description: 'Banner, large-format, sticker and label printing.',
-    serviceSlugs: ['banner-printing', 'sticker-printing'],
+    description: 'Banner, large-format, sticker, label and T-shirt printing.',
+    serviceSlugs: ['banner-printing', 'sticker-printing', 'tshirt-branding'],
   },
   {
     id: 'mug_branding',

@@ -1,10 +1,10 @@
 import React from 'react';
-import { Check, ChevronRight, Code2, Palette, PanelsTopLeft, ScanLine, Sticker, Coffee, Sparkles } from 'lucide-react';
+import { Check, ChevronRight, Code2, Palette, PanelsTopLeft, ScanLine, Sticker, Coffee, Shirt, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { services } from '../lib/catalog';
 import ScrollReveal from '../components/ScrollReveal';
 
-const icons = [Code2, Palette, PanelsTopLeft, Sticker, Coffee, ScanLine];
+const icons = [Code2, Palette, PanelsTopLeft, Sticker, Shirt, Coffee, ScanLine];
 const Services: React.FC = () => <>
   <section className="service-page-hero">
     <div className="container-shell relative z-10 grid lg:grid-cols-[1fr_.7fr] items-end gap-10 py-20 md:py-28">

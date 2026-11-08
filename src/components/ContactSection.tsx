@@ -14,7 +14,9 @@ const ContactSection: React.FC = () => {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [emailNoticeSent, setEmailNoticeSent] = useState<boolean | null>(null);
   const [submitError, setSubmitError] = useState('');
+  const [website, setWebsite] = useState('');
   const serviceOptions = [...services.map((service) => service.name), 'I’m not sure yet'];
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(settings.location)}`;
 
@@ -30,13 +32,18 @@ const ContactSection: React.FC = () => {
     setSubmitError('');
     try {
       if (!supabase) throw new Error('The enquiry form is temporarily unavailable. Please contact us directly by phone or email.');
-      const { error } = await supabase.from('contact_inquiries').insert({
-        name: formData.name.trim(), email: formData.email.trim(), phone: formData.phone.trim() || null,
-        service: formData.service, message: formData.message.trim(),
+      const { data, error } = await supabase.functions.invoke('contact-email', {
+        body: {
+          ...formData,
+          name: formData.name.trim(), email: formData.email.trim(), phone: formData.phone.trim(),
+          message: formData.message.trim(), website,
+        },
       });
       if (error) throw error;
+      setEmailNoticeSent(data?.notificationSent === true);
       setSubmitSuccess(true);
       setFormData(initialFormData);
+      setWebsite('');
     } catch {
       setSubmitError('We couldn’t send your enquiry just now. Please try again, or reach us using the phone and email details.');
     } finally {
@@ -55,9 +62,10 @@ const ContactSection: React.FC = () => {
       </aside></ScrollReveal>
 
       <ScrollReveal delay={90}><div className="contact-form-panel"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="eyebrow">PROJECT ENQUIRY</span><h2 className="mt-2 text-2xl font-bold md:text-3xl">Request a conversation</h2><p className="mt-2 text-sm leading-6 text-slate-600">A few details help us direct your request to the right people.</p></div><span className="contact-form-mark"><Send size={19}/></span></div>
-        {submitSuccess&&<div role="status" aria-live="polite" className="contact-success mt-6"><CheckCircle2 size={20}/><div><p className="font-bold">Your enquiry is on its way.</p><p className="mt-1 text-sm">Thank you for reaching out. We’ll follow up using the contact details you provided.</p></div></div>}
+        {submitSuccess&&<div role="status" aria-live="polite" className="contact-success mt-6"><CheckCircle2 size={20}/><div><p className="font-bold">Your enquiry has been received.</p><p className="mt-1 text-sm">{emailNoticeSent ? 'Our team has been notified and will follow up using the contact details you provided.' : 'Your request was saved, but our email alert could not be sent. We’ll follow up using the contact details you provided.'}</p></div></div>}
         {submitError&&<div role="alert" className="contact-error mt-6">{submitError}</div>}
         <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          <div aria-hidden="true" className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"><label htmlFor="website">Leave this field empty</label><input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)}/></div>
           <div className="grid gap-5 sm:grid-cols-2"><div><label htmlFor="name" className="form-label">Full name <span aria-hidden="true">*</span></label><input autoComplete="name" type="text" id="name" name="name" value={formData.name} onChange={handleChange} required maxLength={120} placeholder="Your name" className="form-control"/></div><div><label htmlFor="email" className="form-label">Email address <span aria-hidden="true">*</span></label><input autoComplete="email" type="email" id="email" name="email" value={formData.email} onChange={handleChange} required maxLength={254} placeholder="you@example.com" className="form-control"/></div><div><label htmlFor="phone" className="form-label">Phone number</label><input autoComplete="tel" type="tel" id="phone" name="phone" value={formData.phone} onChange={handleChange} maxLength={40} placeholder="+254…" className="form-control"/></div><div><label htmlFor="service" className="form-label">Service you’re interested in <span aria-hidden="true">*</span></label><select id="service" name="service" value={formData.service} onChange={handleChange} required className="form-control"><option value="" disabled>Select a service</option>{serviceOptions.map((service)=><option key={service} value={service}>{service}</option>)}</select></div></div>
           <div><div className="mb-1 flex items-center justify-between gap-3"><label htmlFor="message" className="form-label !mb-0">Project details <span aria-hidden="true">*</span></label><span className="text-xs text-slate-400">{formData.message.length}/2000</span></div><textarea id="message" name="message" rows={6} value={formData.message} onChange={handleChange} required minLength={10} maxLength={2000} placeholder="What are you hoping to create? Include key sizes, quantities, timing or any details you already know." className="form-control min-h-36 resize-y"/></div>
           <div className="flex flex-col gap-4 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="max-w-sm text-xs leading-5 text-slate-500">By sending this request, you agree that nexxacrafts may contact you about this enquiry.</p><button type="submit" disabled={isSubmitting} className="btn-primary btn-lg shrink-0 disabled:cursor-not-allowed disabled:opacity-60"><Send size={16}/>{isSubmitting?'Sending…':'Send enquiry'}</button></div>

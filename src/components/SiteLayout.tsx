@@ -6,6 +6,7 @@ import { useCompanySettings } from '../context/CompanySettingsContext';
 import { Logo } from './brand/Logo';
 import { company } from '../content/company';
 import { services } from '../lib/catalog';
+import ThemeToggle from './ThemeToggle';
 
 const SiteLayout: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -26,13 +27,14 @@ const SiteLayout: React.FC = () => {
           <NavLink to="/track" className={({isActive}) => `nav-link ${isActive ? 'active' : ''}`}><span className="inline-flex items-center gap-1.5"><PackageSearch size={15}/>Track order</span></NavLink>
         </nav>
         <div className="hidden lg:flex items-center gap-2">
+          <ThemeToggle />
           <Link to="/account" className="icon-button" aria-label="Account"><UserRound size={18}/></Link>
           <Link to="/cart" className="icon-button relative" aria-label="Cart"><ShoppingBag size={18}/>{count > 0 && <span className="cart-dot">{count}</span>}</Link>
           <Link to="/services" className="btn-primary">Start an order <ArrowUpRight size={16}/></Link>
         </div>
         <button className="lg:hidden icon-button" onClick={() => setOpen(!open)} aria-label={open ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={open} aria-controls="mobile-navigation">{open ? <X/> : <Menu/>}</button>
       </div>
-      {open && <div id="mobile-navigation" className="lg:hidden border-t border-slate-100 bg-white px-5 py-4 space-y-1">{links.map(([label,to]) => <NavLink onClick={() => setOpen(false)} key={to} to={to} className="block rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50">{label}</NavLink>)}<NavLink onClick={() => setOpen(false)} to="/track" className="flex items-center gap-2 rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50"><PackageSearch size={17}/>Track order</NavLink><div className="flex gap-2 border-t border-line pt-3 mt-2"><Link onClick={() => setOpen(false)} to="/account" className="btn-outline flex-1">My account</Link><Link onClick={() => setOpen(false)} to="/cart" className="btn-primary flex-1">Cart ({count})</Link></div><Link onClick={() => setOpen(false)} to="/services" className="btn-primary w-full">Start an order <ArrowUpRight size={16}/></Link></div>}
+      {open && <div id="mobile-navigation" className="lg:hidden border-t border-slate-100 bg-white px-5 py-4 space-y-1">{links.map(([label,to]) => <NavLink onClick={() => setOpen(false)} key={to} to={to} className="block rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50">{label}</NavLink>)}<NavLink onClick={() => setOpen(false)} to="/track" className="flex items-center gap-2 rounded-lg px-3 py-2.5 font-semibold hover:bg-slate-50"><PackageSearch size={17}/>Track order</NavLink><div className="flex items-center justify-between border-t border-line pt-3 mt-2"><span className="text-sm font-semibold text-slate-600">Appearance</span><ThemeToggle /></div><div className="flex gap-2 border-t border-line pt-3 mt-2"><Link onClick={() => setOpen(false)} to="/account" className="btn-outline flex-1">My account</Link><Link onClick={() => setOpen(false)} to="/cart" className="btn-primary flex-1">Cart ({count})</Link></div><Link onClick={() => setOpen(false)} to="/services" className="btn-primary w-full">Start an order <ArrowUpRight size={16}/></Link></div>}
     </header>
     <main className="flex-1"><div key={location.pathname} className="site-route-transition"><Outlet/></div></main>
     <footer className="site-footer">

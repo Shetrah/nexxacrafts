@@ -9,6 +9,7 @@ import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
 import { CompanySettingsProvider } from './context/CompanySettingsContext';
 import { ToastProvider } from './components/ui';
+import { ThemeProvider } from './context/ThemeContext';
 
 // The homepage ships in the main bundle; every other route is code-split so first visits stay fast
 // and the staff portal never loads for customers.
@@ -31,6 +32,7 @@ const ChartsPreview = import.meta.env.DEV ? lazy(() => import('./dev/ChartsPrevi
 
 function App() {
   return (
+    <ThemeProvider>
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ScrollToTop />
       <AuthProvider>
@@ -64,6 +66,7 @@ function App() {
         </CompanySettingsProvider>
       </AuthProvider>
     </Router>
+    </ThemeProvider>
   );
 }
 
