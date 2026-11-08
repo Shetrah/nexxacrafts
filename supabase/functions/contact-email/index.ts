@@ -1,12 +1,13 @@
 const allowedOrigins = new Set([
   'https://nexxacrafts.co.ke',
   'https://www.nexxacrafts.co.ke',
+  'https://nexxacrafts.vercel.app',
   'http://localhost:5173',
   'http://localhost:5174',
 ]);
 
 const corsHeaders = (origin: string | null) => ({
-  'Access-Control-Allow-Origin': origin && allowedOrigins.has(origin) ? origin : 'https://www.nexxacrafts.co.ke',
+  ...(origin && allowedOrigins.has(origin) ? { 'Access-Control-Allow-Origin': origin } : {}),
   'Access-Control-Allow-Headers': 'authorization, apikey, x-client-info, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Vary': 'Origin',
@@ -24,7 +25,10 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('origin');
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(origin) });
+  if (request.method === 'OPTIONS') {
+    if (origin && !allowedOrigins.has(origin)) return new Response('Origin not allowed', { status: 403, headers: corsHeaders(origin) });
+    return new Response('ok', { headers: corsHeaders(origin) });
+  }
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, origin);
   if (origin && !allowedOrigins.has(origin)) return json({ error: 'Origin not allowed' }, 403, origin);
 
@@ -54,7 +58,7 @@ Deno.serve(async (request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const resendKey = Deno.env.get('RESEND_API_KEY');
   const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
-  const toEmail = Deno.env.get('CONTACT_TO_EMAIL') || 'nexxacrafts@gmail.com';
+  const toEmail = 'nexxacrafts@gmail.com';
   if (!supabaseUrl || !serviceKey) {
     console.error('Contact email function is missing required server-side configuration');
     return json({ error: 'The enquiry form is temporarily unavailable. Please contact us by phone or email.' }, 503, origin);
@@ -102,6 +106,8 @@ Deno.serve(async (request) => {
       console.error('Resend rejected contact notification', sent.status, await sent.text());
       return json({ ok: true, notificationSent: false }, 200, origin);
     }
+    const result = await sent.json().catch(() => null);
+    console.log('Resend accepted contact notification', { emailId: result?.id ?? 'unknown', recipient: toEmail });
   } catch (error) {
     console.error('Could not reach Resend for contact notification', error);
     return json({ ok: true, notificationSent: false }, 200, origin);
