@@ -1,6 +1,6 @@
-# NexxaCraft platform
+# nexxacrafts platform
 
-NexxaCraft is a React + TypeScript + Vite application for a combined digital-services, creative, print, branding and laser-cutting business. It includes a public storefront, configurable service ordering, quote requests, cart/checkout request flow, customer account screens and a role-aware staff administration portal.
+nexxacrafts is a React + TypeScript + Vite application for a combined digital-services, creative, print, branding and laser-cutting business. It includes a public storefront, configurable service ordering, quote requests, cart/checkout request flow, customer account screens and a role-aware staff administration portal.
 
 ## Stack
 
@@ -36,7 +36,7 @@ where id = (select id from auth.users where email = 'OWNER_EMAIL_HERE');
 ```
 
 7. Sign in at `/admin`. Create staff accounts from the normal account registration flow and assign their roles from Admin → Staff & roles. Only a super administrator can change roles.
-8. Configure the actual unit rates under Admin → Pricing rules. No sale prices are hardcoded because NexxaCraft's approved price list has not yet been provided.
+8. Configure the actual unit rates under Admin → Pricing rules. No sale prices are hardcoded because nexxacrafts's approved price list has not yet been provided.
 
 ## Current implementation scope
 
@@ -62,12 +62,12 @@ Rates are deliberately inactive/empty by default. For the three instant-configur
 
 ## Production launch checklist
 
-- Replace placeholder/generic stock imagery with NexxaCraft-owned portfolio and product photography.
-- The primary site wordmark and new SVG brand mark use the approved spelling “NexxaCraft”. The original supplied PNG logo is preserved in `public/` but is no longer used in the primary navigation.
+- Replace placeholder/generic stock imagery with nexxacrafts-owned portfolio and product photography.
+- The primary site wordmark and new SVG brand mark use the approved spelling “nexxacrafts”. The original supplied PNG logo is preserved in `public/` but is no longer used in the primary navigation.
 - Supply real price lists, minimum charges, quantity breaks, rush rules and supported machine/material constraints.
 - Complete payment-provider Edge Functions and webhook verification.
 - Finish production, proof approval, inventory, expense, invoice, project and delivery CRUD screens.
 - Add email/SMS notification providers and templates.
 - Configure domain, HTTPS, backups, database monitoring and storage retention.
 - Run end-to-end tests with test customers and staff roles before accepting live orders.
-# nexxacrafts
+# nexxacraftss

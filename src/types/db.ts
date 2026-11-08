@@ -1,8 +1,8 @@
 /**
- * Row types for the NexxaCraft Supabase schema.
+ * Row types for the nexxacrafts Supabase schema.
  *
  * Source of truth: `supabase/migrations/20260915215228_create_contact_inquiries.sql` and
- * `supabase/migrations/20261107000100_nexxacraft_platform.sql`. Keep these in sync with the SQL —
+ * `supabase/migrations/20261107000100_nexxacrafts_platform.sql`. Keep these in sync with the SQL —
  * column names, nullability and CHECK constraints are mirrored exactly.
  *
  * Conventions:

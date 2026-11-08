@@ -1,7 +1,7 @@
 /**
  * Portfolio entries. Images are resolved from `media.portfolio[imageKey]` in src/content/media.ts.
  * Entries marked `illustrative: true` use licensed stock photography to represent the type of work
- * (carried over from the previous site) and must be replaced with NexxaCraft's own project
+ * (carried over from the previous site) and must be replaced with nexxacrafts's own project
  * photography before launch — the UI labels them "Illustrative image".
  */
 export type PortfolioCategory = 'digital' | 'branding' | 'print' | 'packaging';

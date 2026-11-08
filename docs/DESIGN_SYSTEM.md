@@ -1,6 +1,6 @@
-# NexxaCraft Design System — "Precision Craft"
+# nexxacrafts Design System — "Precision Craft"
 
-This document is the single source of truth for how NexxaCraft looks, reads and behaves across the
+This document is the single source of truth for how nexxacrafts looks, reads and behaves across the
 public website, the customer workspace and the staff portal. Every screen should be built from the
 tokens and components described here (`src/components/ui`, `src/components/charts`,
 `src/components/brand`), not from one-off styles.
@@ -9,7 +9,7 @@ tokens and components described here (`src/components/ui`, `src/components/chart
 
 ## 1. Concept
 
-NexxaCraft sits where **digital craft meets physical production**: websites and software, graphic
+nexxacrafts sits where **digital craft meets physical production**: websites and software, graphic
 design, large-format print, stickers, branded merchandise and laser fabrication. The visual language
 borrows quietly from the production floor — spec sheets, registration marks, cutting-mat grids, ink on
 paper — and renders it with the restraint of a modern SaaS product.

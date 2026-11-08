@@ -115,7 +115,7 @@ export default function ChartsPreview() {
             </p>
             <h1 className="mt-2 font-display text-2xl font-bold text-slate-900">Charts</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              The NexxaCraft SVG chart library (<code className="font-mono text-xs">@/components/charts</code>
+              The nexxacrafts SVG chart library (<code className="font-mono text-xs">@/components/charts</code>
               ). Each chart is shown with sample data and with no data. Hover or tab into a chart to see its
               readout; use the Table button for the accessible data view.
             </p>

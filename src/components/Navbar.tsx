@@ -39,7 +39,7 @@ const Navbar: React.FC = () => {
             <div className="relative">
               <img 
                 src="/Nexa Logo.png" 
-                alt="NexxaCraft Logo" 
+                alt="nexxacrafts Logo" 
                 className="h-12 w-auto transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-lg bg-white rounded-lg p-1"
                 style={{ 
                   filter: 'drop-shadow(0 2px 8px rgba(3, 65, 252, 0.3))',

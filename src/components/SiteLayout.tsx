@@ -18,7 +18,7 @@ const SiteLayout: React.FC = () => {
     <header className="site-header">
       <div className="container-shell h-[76px] flex items-center justify-between gap-5">
         <Link to="/" className="flex items-center gap-3 shrink-0">
-          <img src="/Nexa%20Logo.png" alt="NexxaCraft — Create, Print, Build" className="h-14 w-auto max-w-[190px] object-contain" />
+          <img src="/Nexa%20Logo.png" alt="nexxacrafts — Create, Print, Build" className="h-14 w-auto max-w-[190px] object-contain" />
         </Link>
         <nav aria-label="Main navigation" className="hidden lg:flex items-center gap-5 xl:gap-6">
           <NavLink to="/" className={({isActive}) => `nav-link ${isActive ? 'active' : ''}`} end>Home</NavLink>

@@ -31,7 +31,7 @@ const FooterSection: React.FC = () => {
               <div className="flex items-center space-x-3 mb-6">
                 <img
                   src="/Nexa Logo.png"
-                  alt="NexxaCraft Logo"
+                  alt="nexxacrafts Logo"
                   className="h-10 w-auto transition-all duration-300 group-hover:scale-110 bg-white rounded-lg p-1"
                   style={{
                     filter: "drop-shadow(0 2px 8px rgba(3, 65, 252, 0.3))",
@@ -130,7 +130,7 @@ const FooterSection: React.FC = () => {
 
           <div className="border-t border-gray-700 pt-8 mt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-500 mb-4 md:mb-0">
-              &copy; {new Date().getFullYear()} NexxaCraft. All rights reserved.
+              &copy; {new Date().getFullYear()} nexxacrafts. All rights reserved.
             </p>
             <div className="flex space-x-6">
               <a

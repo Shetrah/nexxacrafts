@@ -48,7 +48,7 @@ function writeStorage(key: string, value: unknown): void {
  * Only the values you set are written (the initial value is not persisted until changed).
  * `T` must be JSON-serialisable.
  *
- * @example const [view, setView] = useLocalStorageState<'table' | 'board'>('nexxacraft-jobs-view', 'table');
+ * @example const [view, setView] = useLocalStorageState<'table' | 'board'>('nexxacrafts-jobs-view', 'table');
  */
 export function useLocalStorageState<T>(key: string, initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>] {
   const [state, setState] = useState<StoredState<T>>(() => ({ key, value: readStorage(key, initial), dirty: false }));

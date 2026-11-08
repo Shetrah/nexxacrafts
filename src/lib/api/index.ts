@@ -1,5 +1,5 @@
 /**
- * Typed data-access layer for NexxaCraft. Import everything from `@/lib/api`.
+ * Typed data-access layer for nexxacrafts. Import everything from `@/lib/api`.
  *
  * - Every function throws `Error('Supabase is not configured for this environment.')` when the
  *   Supabase environment variables are missing (the re-exported `src/lib/platform.ts` and

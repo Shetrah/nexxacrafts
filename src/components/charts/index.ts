@@ -1,5 +1,5 @@
 /**
- * NexxaCraft chart library — dependency-free SVG charts for the staff dashboards.
+ * nexxacrafts chart library — dependency-free SVG charts for the staff dashboards.
  *
  * Every chart is responsive (ResizeObserver), exposes a `role="img"` summary plus a data-table
  * twin, shows a clean empty state for empty or all-zero data, and takes its colours from the

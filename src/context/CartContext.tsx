@@ -17,7 +17,7 @@ interface CartContextValue {
   count: number;
 }
 const CartContext = createContext<CartContextValue | null>(null);
-const STORAGE_KEY = 'nexxacraft-cart-v1';
+const STORAGE_KEY = 'nexxacrafts-cart-v1';
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as CartItem[]; } catch { return []; }

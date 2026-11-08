@@ -1,8 +1,8 @@
-# NexxaCraft implementation and handover notes
+# nexxacrafts implementation and handover notes
 
 ## Decisions applied
 
-- Brand display name: **NexxaCraft**
+- Brand display name: **nexxacrafts**
 - Admin access: role-based staff accounts, including a first `super_admin`
 - Pricing: hybrid (configured instant estimates for standard jobs; reviewed quotes for complex work)
 - Preferred payment methods: M-Pesa, bank transfer and card
@@ -20,7 +20,7 @@
 
 ## Immediate setup dependencies
 
-The ZIP did not include a `.env` file or credentials, so the project cannot connect to the real Supabase project until NexxaCraft supplies those values. Do not commit `.env` to version control.
+The ZIP did not include a `.env` file or credentials, so the project cannot connect to the real Supabase project until nexxacrafts supplies those values. Do not commit `.env` to version control.
 
 The first user created through `/account` receives the `customer` role. Promote the owner to `super_admin` using the SQL in the root README. Then create staff accounts and assign only the required role to each person.
 

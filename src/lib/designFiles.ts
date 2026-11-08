@@ -43,7 +43,7 @@ export const FILE_ROLE_META: Record<FileRole, { label: string; staffLabel: strin
   proof: {
     label: 'Proofs',
     staffLabel: 'Proofs',
-    description: 'Design proofs prepared by the NexxaCraft team.',
+    description: 'Design proofs prepared by the nexxacrafts team.',
   },
 };
 

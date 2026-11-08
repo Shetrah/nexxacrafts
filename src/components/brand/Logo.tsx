@@ -1,8 +1,8 @@
 /**
- * NexxaCraft logo system, rendered as inline SVG (no network request, no font dependency).
+ * nexxacrafts logo system, rendered as inline SVG (no network request, no font dependency).
  *
  * Every shape is built from geometric primitives (circles, lines, rounded rectangles). The path
- * data mirrors the master files in /public/brand (nexxacraft-logo, -wordmark, -mark): change both together.
+ * data mirrors the master files in /public/brand (nexxacrafts-logo, -wordmark, -mark): change both together.
  */
 
 /** `full` stacked lockup (master) · `wordmark` single line · `mark` "N." monogram tile. */
@@ -41,7 +41,7 @@ const FULL = {
     'M409 242h92.2v18a18 18 0 0 1 -18 18H409a13 13 0 0 0 -13 13v62a13 13 0 0 0 13 13h74.2a18 18 0 0 1 18 18v18H409A49 49 0 0 1 360 353V291a49 49 0 0 1 49 -49ZM527.2 242h92.2a49 49 0 0 1 49 49a49 49 0 0 1 -37.96 47.74L668.4 402H626.42l-37.2 -62H563.2v62h-36V304h92.2a13 13 0 0 0 13 -13a13 13 0 0 0 -13 -13H545.2a18 18 0 0 1 -18 -18ZM743.4 242h92.2v18a18 18 0 0 1 -18 18H743.4a13 13 0 0 0 -13 13v31a18 18 0 0 1 18 -18h87.2v98h-36V340H730.4v62h-36V291a49 49 0 0 1 49 -49ZM879.6 242h123.2v18a18 18 0 0 1 -18 18H897.6v26h71.31v18a18 18 0 0 1 -18 18H897.6v62h-36V260a18 18 0 0 1 18 -18ZM1046.8 242H1170v18a18 18 0 0 1 -18 18H1028.8V260a18 18 0 0 1 18 -18ZM1081.4 304h36v80a18 18 0 0 1 -18 18h-18Z',
 } as const;
 
-/** Single line "NexxaCRAFT": CRAFT capitals sit on the x-height band of "exxa". */
+/** Single line "nexxacrafts": CRAFT capitals sit on the x-height band of "exxa". */
 const WORDMARK = {
   viewBox: '0 0 2130 290',
   nexxa:
@@ -80,13 +80,13 @@ function a11yProps(title: string) {
 }
 
 /**
- * NexxaCraft logo. Use `full` as the default brand signature, `wordmark` where height is scarce
+ * nexxacrafts logo. Use `full` as the default brand signature, `wordmark` where height is scarce
  * (desktop header), `mark` for compact spaces. Use `tone="inverse"` on ink/dark surfaces.
  *
  * @example <Logo className="h-9 w-auto" />
  * @example <Logo variant="wordmark" tone="inverse" className="h-7 w-auto" />
  */
-export function Logo({ variant = 'full', tone = 'color', className, title = 'NexxaCraft' }: LogoProps) {
+export function Logo({ variant = 'full', tone = 'color', className, title = 'nexxacrafts' }: LogoProps) {
   if (variant === 'mark') return <LogoMark tone={tone} className={className} title={title} />;
 
   const art = variant === 'wordmark' ? WORDMARK : FULL;
@@ -111,7 +111,7 @@ export function Logo({ variant = 'full', tone = 'color', className, title = 'Nex
  *
  * @example <LogoMark className="size-8" />
  */
-export function LogoMark({ tone = 'color', className, title = 'NexxaCraft' }: LogoMarkProps) {
+export function LogoMark({ tone = 'color', className, title = 'nexxacrafts' }: LogoMarkProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

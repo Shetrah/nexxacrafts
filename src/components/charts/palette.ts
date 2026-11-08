@@ -1,5 +1,5 @@
 /**
- * NexxaCraft chart palette ("Process" theme) — the single source of colour for every chart.
+ * nexxacrafts chart palette ("Process" theme) — the single source of colour for every chart.
  *
  * Derived with the dataviz method (form → colour job → validate → marks → interaction) and the
  * runnable validator `validate_palette.js` (OKLab ΔE ×100, Machado-Oliveira-Fernandes 2009 CVD
@@ -23,7 +23,7 @@
  *
  * - Slot 1 is the brand's electric blue, so a single-series chart is always on-brand.
  * - Slots 1–4 mirror process inks — key (brand blue), cyan (teal), magenta (plum), yellow
- *   (amber) — a quiet nod to NexxaCraft's print floor, alternating dark/light so neighbours
+ *   (amber) — a quiet nod to nexxacrafts's print floor, alternating dark/light so neighbours
  *   separate by lightness as well as hue.
  * - The warm sector of the wheel belongs to status: `danger` (red-600) and `warning` (amber-600)
  *   sit at OKLCH h 27–58 and red is brand punctuation, so red/rose/orange are excluded and the

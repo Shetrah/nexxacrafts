@@ -1,5 +1,5 @@
 /**
- * NexxaCraft design tokens — "Precision Craft".
+ * nexxacrafts design tokens — "Precision Craft".
  * Source of truth for values: docs/DESIGN_SYSTEM.md (section 2–4).
  *
  * @type {import('tailwindcss').Config}

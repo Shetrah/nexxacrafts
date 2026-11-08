@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 export interface PricingRate { service_slug: string; unit_rate: number; setup_fee: number; unit_label: string; active: boolean; }
-const KEY = 'nexxacraft-pricing-rates-v1';
+const KEY = 'nexxacrafts-pricing-rates-v1';
 export function getLocalRates(): PricingRate[] {
   try { return JSON.parse(localStorage.getItem(KEY) || '[]') as PricingRate[]; } catch { return []; }
 }

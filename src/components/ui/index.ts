@@ -1,5 +1,5 @@
 /**
- * NexxaCraft UI kit — "Precision Craft". Import everything from '@/components/ui'.
+ * nexxacrafts UI kit — "Precision Craft". Import everything from '@/components/ui'.
  * Usage rules and the component inventory: docs/DESIGN_SYSTEM.md (section 7).
  */
 

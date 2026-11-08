@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { ArrowRight, ArrowUpRight, BadgeCheck, Box, Clock3, Upload, Layers, MessageSquare, Package, Briefcase, GraduationCap, PartyPopper, ShoppingBasket, MonitorSmartphone, Factory } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { services } from '../lib/catalog';
@@ -9,29 +9,17 @@ import { Logo } from '../components/brand/Logo';
 const animatedLetters = (text: string, start: number, red = false) => Array.from(text).map((character, index) => <span key={`${start}-${index}`} aria-hidden="true" className={red ? 'home-hero-letter home-hero-letter-red' : 'home-hero-letter'} style={{ animationDelay: `${start + index * 22}ms` }}>{character === ' ' ? '\u00a0' : character}</span>);
 
 function StudioReel() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const syncPlayback = () => {
-      if (motionPreference.matches) video.pause();
-      else void video.play().catch(() => undefined);
-    };
-    syncPlayback();
-    motionPreference.addEventListener('change', syncPlayback);
-    return () => motionPreference.removeEventListener('change', syncPlayback);
-  }, []);
-
-  return <div className="hero-image-wrap hero-video-wrap">
-    <video ref={videoRef} muted loop playsInline preload="metadata" poster="/og-image.png" aria-label="NexxaCraft banner printing and studio production">
+  return <div className="hero-studio-stack">
+    <div className="hero-studio-wordmark"><Logo variant="wordmark" className="hero-studio-logo" title="NexxaCraft"/></div>
+    <div className="hero-image-wrap hero-video-wrap">
+    <video autoPlay muted loop playsInline preload="metadata" poster="/og-image.png" aria-label="NexxaCraft banner printing and studio production">
       <source src="/bannerprinting.mp4" type="video/mp4"/>
       Your browser does not support embedded video.
     </video>
     <div className="hero-video-shade" aria-hidden="true"/>
-    <div className="hero-video-brand"><Logo tone="inverse" className="h-8 w-auto" title="NexxaCraft"/><span className="hero-video-live"><span/>Studio reel</span></div>
-    <div className="hero-video-caption"><span className="hero-video-kicker">NEXXACRAFT PRODUCTION</span><p>Design · Print · Build</p></div>
+    <div className="hero-video-brand"><span className="hero-video-live"><span/>Studio reel</span></div>
+    <div className="hero-video-caption"><span className="hero-video-kicker">nexxacrafts PRODUCTION</span><p>Design · Print · Build</p></div>
+    </div>
   </div>;
 }
 
@@ -41,11 +29,11 @@ const Home: React.FC = () => <>
       <div className="max-w-2xl">
         <div className="eyebrow"><span className="eyebrow-dot"/> YOUR CREATIVE & PRODUCTION PARTNER</div>
         <h1 className="hero-title mt-6" aria-label="From the first idea to the finished product."><span aria-hidden="true">{animatedLetters('From the first idea to the ', 80)}{animatedLetters('finished product.', 640, true)}</span></h1>
-        <p className="text-lg text-slate-600 mt-6 leading-8 max-w-xl">NexxaCraft brings digital development, graphic design, professional printing, branding and precision fabrication together in one simple place.</p>
+        <p className="text-lg text-slate-600 mt-6 leading-8 max-w-xl">nexxacrafts brings digital development, graphic design, professional printing, branding and precision fabrication together in one simple place.</p>
         <div className="mt-9 flex flex-col sm:flex-row gap-3"><Link to="/services" className="btn-primary btn-lg">Explore services <ArrowUpRight size={18}/></Link><Link to="/quote" className="btn-outline btn-lg">Request a custom quote</Link></div>
         <div className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-3 text-sm text-slate-500"><span className="flex items-center gap-2"><BadgeCheck size={17} className="text-blue-600"/> Tailored to your brief</span><span className="flex items-center gap-2"><Clock3 size={17} className="text-blue-600"/> Clear production updates</span><span className="flex items-center gap-2"><Upload size={17} className="text-blue-600"/> Upload your artwork</span></div>
       </div>
-      <div className="relative max-w-xl mx-auto w-full">
+      <div className="hero-studio-column relative max-w-xl mx-auto w-full">
         <StudioReel />
         <div className="floating-card floating-card-top"><div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 grid place-items-center"><Layers size={20}/></div><div><p className="font-bold text-sm">Large-format printing</p><p className="text-xs text-slate-500">Banner production</p></div></div>
         <div className="floating-card floating-card-bottom"><div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center"><Package size={20}/></div><div><p className="font-bold text-sm">Design to delivery</p><p className="text-xs text-slate-500">One connected team</p></div></div>

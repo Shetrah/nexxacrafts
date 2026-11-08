@@ -20,7 +20,7 @@ export const testimonials: Testimonial[] = [
   {
     id: 'rebearth-solutions',
     quote:
-      'Partnering with NexxaCraft to design our website and brand our marketing materials was a seamless and rewarding experience. Their team perfectly captured our brand identity and delivered a clean, modern look that truly represents Rebearth Solutions.',
+      'Partnering with nexxacrafts to design our website and brand our marketing materials was a seamless and rewarding experience. Their team perfectly captured our brand identity and delivered a clean, modern look that truly represents Rebearth Solutions.',
     name: 'Walter',
     role: 'Director',
     company: 'Rebearth Solutions',
@@ -31,7 +31,7 @@ export const testimonials: Testimonial[] = [
   {
     id: 'stetech-solar',
     quote:
-      'NexxaCraft did an exceptional job redesigning our website and elevating our brand. Their team was responsive, creative, and truly understood the clean energy space. The new look has boosted our credibility and client engagement.',
+      'nexxacrafts did an exceptional job redesigning our website and elevating our brand. Their team was responsive, creative, and truly understood the clean energy space. The new look has boosted our credibility and client engagement.',
     name: 'Stephen Otieno',
     role: 'Founder & Technical Lead',
     company: 'STETECH Solar Technology',

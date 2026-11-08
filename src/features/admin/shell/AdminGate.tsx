@@ -70,7 +70,7 @@ const AdminGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return (
       <div className="container-page py-16 text-center">
         <h1 className="text-2xl font-bold">Access not authorised</h1>
-        <p className="mt-2 text-slate-600">This account does not have a NexxaCraft staff role.</p>
+        <p className="mt-2 text-slate-600">This account does not have a nexxacrafts staff role.</p>
         <button className="btn-outline mt-6" onClick={() => signOut()}>Sign out</button>
       </div>
     );

@@ -1,5 +1,5 @@
 /*
- * NexxaCraft global styles — "Precision Craft".
+ * nexxacrafts global styles — "Precision Craft".
  * Tokens live in tailwind.config.js; rules and usage in docs/DESIGN_SYSTEM.md.
  * Fonts (Inter, Manrope, JetBrains Mono) are loaded from index.html.
  */
@@ -823,6 +823,13 @@
 @layer components {
   .hero-video-wrap { isolation:isolate; background:#070b16; }
   .hero-video-wrap > video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
+  .hero-studio-stack { width:100%; }
+  .hero-studio-wordmark { display:flex; justify-content:center; margin:0 auto 1rem; }
+  .hero-studio-logo { display:block; width:min(82%,22rem); height:auto; overflow:visible; }
+  .hero-studio-logo path { transform-box:fill-box; transform-origin:center; will-change:transform,opacity,filter; }
+  .hero-studio-logo path:first-of-type { animation:hero-logo-blue-life 4.8s cubic-bezier(.2,.7,.25,1) infinite; }
+  .hero-studio-logo path:last-of-type { animation:hero-logo-red-life 4.8s cubic-bezier(.2,.7,.25,1) 90ms infinite; }
+  .hero-studio-column .floating-card-top { top:100px; }
   .hero-video-shade { position:absolute; z-index:1; inset:0; background:linear-gradient(180deg,rgba(7,11,22,.55),transparent 35%,transparent 55%,rgba(7,11,22,.62)); pointer-events:none; }
   .hero-video-brand { position:absolute; z-index:2; top:1rem; left:1rem; display:flex; align-items:center; gap:.75rem; border:1px solid rgba(255,255,255,.24); border-radius:.85rem; background:rgba(7,11,22,.68); padding:.6rem .75rem; backdrop-filter:blur(10px); }
   .hero-video-live { display:inline-flex; align-items:center; gap:.4rem; color:#fff; font-size:.68rem; font-weight:750; }
@@ -831,5 +838,8 @@
   .hero-video-kicker { color:#dce6ff; font-size:.65rem; font-weight:800; letter-spacing:.17em; }
   .hero-video-caption p { margin-top:.35rem; color:#fff; font-size:1.15rem; font-weight:800; }
 }
-@media (max-width: 640px) { .hero-video-wrap { height:320px; } .hero-video-brand { top:.75rem; left:.75rem; } .hero-video-caption { bottom:.85rem; left:1rem; } }
+@media (max-width: 640px) { .hero-video-wrap { height:320px; } .hero-video-brand { top:.75rem; left:.75rem; } .hero-video-caption { bottom:.85rem; left:1rem; } .hero-studio-column .floating-card-top { top:82px; } }
 @media (prefers-reduced-motion: reduce) { .hero-video-live > span { box-shadow:none; } }
+@keyframes hero-logo-blue-life { 0%,15%,67%,100% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } 5% { opacity:.58; filter:blur(2px); transform:translate(-10px,-12px) rotate(-3deg) scale(.94); } 13% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } 74% { opacity:.58; filter:blur(2px); transform:translate(11px,9px) rotate(2.5deg) scale(.95); } 84% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } }
+@keyframes hero-logo-red-life { 0%,16%,68%,100% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } 6% { opacity:.55; filter:blur(2px); transform:translate(10px,12px) rotate(3deg) scale(.93); } 14% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } 75% { opacity:.56; filter:blur(2px); transform:translate(-11px,-9px) rotate(-2.5deg) scale(.94); } 85% { opacity:1; filter:blur(0); transform:translate(0,0) rotate(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .hero-studio-logo path { animation:none !important; will-change:auto; } }

@@ -1,6 +1,6 @@
 /**
  * Role vocabulary and an access map that mirrors the row-level security policies in
- * `supabase/migrations/20261107000100_nexxacraft_platform.sql`.
+ * `supabase/migrations/20261107000100_nexxacrafts_platform.sql`.
  *
  * The database is the real gatekeeper: use {@link can} only to decide what to show, never as the
  * security boundary. Role names must never change from the UI.

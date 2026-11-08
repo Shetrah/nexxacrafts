@@ -53,7 +53,7 @@ export default function TrackOrder() {
       <div className="max-w-2xl">
         <div className="eyebrow"><PackageCheck size={14}/> ORDER UPDATES</div>
         <h1 className="page-title mt-3">Track your order</h1>
-        <p className="lead mt-4">Enter your NexxaCraft order reference to see its latest progress.</p>
+        <p className="lead mt-4">Enter your nexxacrafts order reference to see its latest progress.</p>
       </div>
       <div className="mt-8 grid gap-6 lg:grid-cols-[.9fr_1.1fr]">
         <form onSubmit={submit} className="form-panel space-y-5" aria-label="Track an order">

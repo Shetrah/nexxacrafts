@@ -14,7 +14,7 @@ const SETTING_VALUE_COLUMNS = columnsOf<SettingValueRow>()('setting_key, setting
  * values: `{ ...COMPANY_SETTING_DEFAULTS, ...(await loadCompanySettings()) }`.
  */
 export const COMPANY_SETTING_DEFAULTS: Readonly<Record<string, string>> = {
-  business_name: 'NexxaCraft',
+  business_name: 'nexxacrafts',
   tagline: 'Create. Design. Print. Build.',
   public_email: 'info@nexacraft.co.ke',
   phone: '+254 795 333 004',

@@ -12,7 +12,7 @@ The account page supports signup confirmation, resending a confirmation link, pa
    - Username: `resend`
    - Password: a Resend API key with permission to send from the verified domain
    - Sender email: the verified address from step 1
-   - Sender name: `NexxaCraft`
+   - Sender name: `nexxacrafts`
 4. In **Authentication → URL Configuration**, set the production Site URL and allow the account confirmation and recovery callback URLs, for example `https://your-domain.example/account` and `https://your-domain.example/account?mode=reset`. Add the local development URL too when testing (for example `http://localhost:5173/account`). Supabase only permits redirects that are allow-listed.
 5. In **Authentication → Providers → Email**, keep email confirmation enabled if new users should verify their address before signing in. Review the **Confirm signup** and **Reset password** templates and preserve Supabase's confirmation and recovery link variables.
 6. Check Resend's sending logs and Supabase Auth logs after trying signup, resend confirmation, and password reset.

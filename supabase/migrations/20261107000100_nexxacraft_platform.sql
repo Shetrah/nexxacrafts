@@ -1,4 +1,4 @@
--- NexxaCraft platform foundation
+-- nexxacrafts platform foundation
 -- Apply after the existing contact_inquiries migration.
 
 create extension if not exists pgcrypto;
@@ -46,8 +46,8 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created_nexxacraft on auth.users;
-create trigger on_auth_user_created_nexxacraft
+drop trigger if exists on_auth_user_created_nexxacrafts on auth.users;
+create trigger on_auth_user_created_nexxacrafts
 after insert on auth.users
 for each row execute procedure public.handle_new_user();
 

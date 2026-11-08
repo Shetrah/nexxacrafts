@@ -3,7 +3,7 @@
  * Values come from the existing site (header, footer, contact page and company settings defaults).
  */
 export const company = {
-  name: 'NexxaCraft',
+  name: 'nexxacrafts',
   tagline: 'Create. Design. Print. Build.',
   summary:
     'One creative and production partner for your digital presence, business branding, print and custom fabrication.',

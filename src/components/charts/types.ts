@@ -1,4 +1,4 @@
-/** Shared public types for the NexxaCraft chart library. */
+/** Shared public types for the nexxacrafts chart library. */
 
 /** One row of tabular chart data: the x/category key plus one numeric field per series. */
 export type ChartDatum = Record<string, string | number>;

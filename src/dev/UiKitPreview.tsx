@@ -504,7 +504,7 @@ function ActionsSection() {
             <ButtonLink to="/services" rightIcon={<ArrowRight />}>
               Router link
             </ButtonLink>
-            <ButtonLink href="https://nexxacraft.example" target="_blank" variant="secondary" rightIcon={<ExternalLink />}>
+            <ButtonLink href="https://nexxacrafts.example" target="_blank" variant="secondary" rightIcon={<ExternalLink />}>
               External link
             </ButtonLink>
             <a href="#actions" className={buttonClasses({ variant: 'subtle', size: 'sm' })}>
@@ -541,7 +541,7 @@ function ActionsSection() {
 
 function FormsSection() {
   const [email, setEmail] = useState('');
-  const [company, setCompany] = useState('NexxaCraft Studio');
+  const [company, setCompany] = useState('nexxacrafts Studio');
   const [invalidEmail, setInvalidEmail] = useState('achieng@');
   const [brief, setBrief] = useState('');
   const [material, setMaterial] = useState<string>('');
@@ -866,7 +866,7 @@ function DisplaySection() {
             <Avatar name="Lakeview Hospitality" />
             <Avatar name="Moses Ouma" />
             <Avatar name={null} />
-            <Avatar name="NexxaCraft" src="/Nexa%20Logo.png" size="lg" />
+            <Avatar name="nexxacrafts" src="/Nexa%20Logo.png" size="lg" />
           </Row>
         </Demo>
       </Grid>
@@ -1734,7 +1734,7 @@ function LayoutSection() {
                 <Button variant="inverse" rightIcon={<ArrowUpRight />}>
                   Request a quote
                 </Button>
-                <Button variant="inverse-outline">Talk to NexxaCraft</Button>
+                <Button variant="inverse-outline">Talk to nexxacrafts</Button>
               </div>
             </div>
             <CropFrame tone="inverse">
@@ -1792,7 +1792,7 @@ function KitPage() {
       <header className="surface-inverse border-b border-ink-700 bg-ink-900 text-slate-300">
         <Container size="wide" className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
           <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-white">
-            NexxaCraft <span className="text-slate-500">/</span> UI kit
+            nexxacrafts <span className="text-slate-500">/</span> UI kit
           </p>
           <nav aria-label="Kit sections" className="-mx-1 overflow-x-auto scrollbar-none">
             <ul className="flex gap-1">

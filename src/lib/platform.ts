@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type { CartItem } from '../context/CartContext';
 
 export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; }
-const DEMO_KEYS = { quotes: 'nexxacraft-demo-quotes', orders: 'nexxacraft-demo-orders' };
+const DEMO_KEYS = { quotes: 'nexxacrafts-demo-quotes', orders: 'nexxacrafts-demo-orders' };
 // Tracking works with a reference alone, so new references need a high-entropy random suffix.
 const makeReference = (prefix: string) => `${prefix}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 const readDemo = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '[]') as any[]; } catch { return []; } };
