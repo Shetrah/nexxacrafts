@@ -31,7 +31,7 @@ const ChartsPreview = import.meta.env.DEV ? lazy(() => import('./dev/ChartsPrevi
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ScrollToTop />
       <AuthProvider>
         <CompanySettingsProvider>

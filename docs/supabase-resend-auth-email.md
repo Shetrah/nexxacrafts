@@ -4,7 +4,7 @@ The account page supports signup confirmation, resending a confirmation link, pa
 
 ## Configure delivery
 
-1. Verify a sending domain in Resend and publish the DNS records Resend provides. Use a sender address on that verified domain, such as `accounts@your-domain.example`.
+1. Verify a sending domain you own in Resend and publish the DNS records Resend provides. Use a sender address on that verified domain, such as `accounts@your-domain.example`. Do not use a `@gmail.com` address as the sender; Resend will reject it because you cannot verify Gmail's domain.
 2. In the Supabase dashboard, open **Authentication → Settings → SMTP Settings** (or the project's Resend integration) and enable custom SMTP.
 3. For manual Resend SMTP setup, use:
    - Host: `smtp.resend.com`

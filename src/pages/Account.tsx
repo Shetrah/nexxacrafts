@@ -7,6 +7,23 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'reset';
 type AccountOrder = { id: string; reference: string; status: string; payment_status: string; created_at: string };
 
+function authErrorMessage(error: unknown, mode: AuthMode): string {
+  if (error && typeof error === 'object') {
+    const detail = error as { message?: string; status?: number; code?: string };
+    if (detail.message && /domain is not verified|verify your domain/i.test(detail.message)) {
+      return 'Resend rejected the sender address because its domain is not verified. Verify a domain in Resend, then use a From address on that domain in Supabase SMTP settings.';
+    }
+    if (detail.status && detail.status >= 500) {
+      const action = mode === 'signup'
+        ? 'Check Supabase Auth logs for an email SMTP/template error or a failing on_auth_user_created database trigger.'
+        : 'Check Supabase Auth logs for the server-side cause.';
+      return `Supabase Auth returned a server error (${detail.status}). ${action}${detail.code ? ` Error code: ${detail.code}.` : ''}`;
+    }
+    if (detail.message) return detail.message;
+  }
+  return 'Authentication failed. Please try again.';
+}
+
 const Account: React.FC = () => {
   const { user, profile, loading, signIn, signUp, resendSignupConfirmation, signOut, requestPasswordReset, updatePassword } = useAuth();
   const [mode, setMode] = useState<AuthMode>(() => new URLSearchParams(window.location.search).get('mode') === 'reset' ? 'reset' : 'signin');
@@ -68,7 +85,7 @@ const Account: React.FC = () => {
         setMessage('Your password has been updated. Sign in with your new password.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed.');
+      setError(authErrorMessage(err, mode));
     } finally {
       setBusy(false);
     }
