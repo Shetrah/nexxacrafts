@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="nexxacraft-mark-title">
+  <title id="nexxacraft-mark-title">NexxaCraft</title>
+  <path fill="#0341FC" d="M14 0H50A14 14 0 0 1 64 14V50A14 14 0 0 1 50 64H14A14 14 0 0 1 0 50V14A14 14 0 0 1 14 0Z"/>
+  <path fill="#FFFFFF" d="M14 13h6L34 38.15V13h8V47a4 4 0 0 1 -4 4H32L18 25.85V51H10V17a4 4 0 0 1 4 -4Z"/>
+  <path fill="#DC2626" d="M46 43h8v8H46Z"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">NexxaCraft brand mark</title>
+  <defs>
+    <linearGradient id="brand" x1="12" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb"/><stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <path d="M64 5 115 34.5v59L64 123 13 93.5v-59L64 5Z" fill="url(#brand)"/>
+  <path d="M35 88V40l29 34V40h11v48L46 54v34H35Z" fill="#fff"/>
+  <path d="M91 52c-4-4-9-6-15-6-14 0-24 10-24 24s10 24 24 24c6 0 12-2 16-7l-8-8c-2 3-5 4-8 4-7 0-12-5-12-13s5-13 12-13c3 0 6 1 8 4l7-9Z" fill="#dbeafe" opacity=".98"/>
+</svg>
