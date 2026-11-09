@@ -28,7 +28,13 @@ const Home: React.FC = () => <>
     <div className="container-shell relative z-10 grid lg:grid-cols-[1.08fr_.92fr] gap-12 items-center py-20 lg:py-28">
       <div className="max-w-2xl">
         <div className="eyebrow"><span className="eyebrow-dot"/> YOUR CREATIVE & PRODUCTION PARTNER</div>
-        <h1 className="hero-title mt-6" aria-label="From the first idea to the finished product."><span aria-hidden="true">{animatedLetters('From the first idea to the ', 80)}{animatedLetters('finished product.', 640, true)}</span></h1>
+        <h1 className="hero-title home-hero-title mt-6">
+          <span className="home-hero-line">{animatedLetters('From the first idea', 80)}</span>
+          <span className="home-hero-line home-hero-highlight" aria-label="to the finished product">
+            <span className="sr-only">to the finished product</span>
+            <span aria-hidden="true"><span className="home-hero-unbreakable">{animatedLetters('to the finished', 640, true)}</span>{animatedLetters(' product.', 1040, true)}</span>
+          </span>
+        </h1>
         <p className="text-lg text-slate-600 mt-6 leading-8 max-w-xl">nexxacrafts brings digital development, graphic design, professional printing, branding and precision fabrication together in one simple place.</p>
         <div className="mt-9 flex flex-col sm:flex-row gap-3"><Link to="/services" className="btn-primary btn-lg">Explore services <ArrowUpRight size={18}/></Link><Link to="/quote" className="btn-outline btn-lg">Request a custom quote</Link></div>
         <div className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-3 text-sm text-slate-500"><span className="flex items-center gap-2"><BadgeCheck size={17} className="text-blue-600"/> Tailored to your brief</span><span className="flex items-center gap-2"><Clock3 size={17} className="text-blue-600"/> Clear production updates</span><span className="flex items-center gap-2"><Upload size={17} className="text-blue-600"/> Upload your artwork</span></div>

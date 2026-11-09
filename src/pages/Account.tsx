@@ -34,6 +34,7 @@ const Account: React.FC = () => {
   const [error, setError] = useState('');
   const [orders, setOrders] = useState<AccountOrder[]>([]);
   const [confirmationPending, setConfirmationPending] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
@@ -57,6 +58,7 @@ const Account: React.FC = () => {
   const update = (key: keyof typeof form, value: string) => setForm(current => ({ ...current, [key]: value }));
   const changeMode = (nextMode: AuthMode) => {
     setMode(nextMode);
+    setAccountCreated(false);
     setShowPassword(false);
     setError('');
     setMessage('');
@@ -73,8 +75,9 @@ const Account: React.FC = () => {
         await signIn(form.email, form.password);
       } else if (mode === 'signup') {
         await signUp({ name: form.name, email: form.email, password: form.password, phone: form.phone });
-        setMode('signin');
         setConfirmationPending(true);
+        setAccountCreated(true);
+        setForm(current => ({ ...current, password: '' }));
         setMessage('Registration received. Check your inbox for a confirmation email before signing in.');
       } else if (mode === 'forgot') {
         await requestPasswordReset(form.email, `${window.location.origin}/account?mode=reset`);
@@ -110,9 +113,18 @@ const Account: React.FC = () => {
         </div>
         <p className="auth-story-foot">DESIGN <i/> PRINT <i/> BUILD <b>·</b> NEXXACRAFT</p>
       </div>
-      <div className="auth-glass-card"><div className="auth-card-heading"><div className="auth-mode-icon">{mode === 'forgot' ? <MailCheck size={22}/> : mode === 'reset' ? <KeyRound size={22}/> : <ShieldCheck size={22}/>}</div><div><h2>{title}</h2><p>{description}</p></div></div>
+      <div className={`auth-glass-card${accountCreated ? ' auth-confirmation-card' : ''}`}>{accountCreated ? <div className="auth-confirmation-content" role="status">
+          <div className="auth-confirmation-icon"><MailCheck size={28}/></div>
+          <p className="auth-confirmation-kicker">WELCOME TO NEXXACRAFT</p>
+          <h2>Your account is ready, {form.name.trim().split(/\s+/)[0] || 'there'}.</h2>
+          <p className="auth-confirmation-copy">We sent a confirmation link to <strong>{form.email}</strong>. Confirm your email to unlock your customer workspace.</p>
+          <div className="auth-confirmation-note"><span className="auth-confirmation-dot"/><span>Check your inbox and spam folder for the NexxaCraft confirmation email.</span></div>
+          {error && <p role="alert" className="auth-alert-error">{error}</p>}
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await resendSignupConfirmation(form.email); setMessage('A fresh confirmation link has been sent. Check your inbox and spam folder.'); } catch (err) { setError(err instanceof Error ? err.message : 'Could not resend the confirmation email.'); } finally { setBusy(false); } }} className="btn-outline auth-confirmation-resend">{busy ? 'Sending…' : 'Resend confirmation email'}</button>
+          <button type="button" onClick={() => changeMode('signin')} className="btn-primary auth-submit">Continue to sign in <ArrowRight size={17}/></button>
+        </div> : <><div className="auth-card-heading"><div className="auth-mode-icon">{mode === 'forgot' ? <MailCheck size={22}/> : mode === 'reset' ? <KeyRound size={22}/> : <ShieldCheck size={22}/>}</div><div><h2>{title}</h2><p>{description}</p></div></div>
         <form onSubmit={submit} className="auth-form">{mode === 'signup' && <><div><label className="form-label" htmlFor="account-name">Full name *</label><input id="account-name" className="form-control" required autoComplete="name" value={form.name} onChange={e => update('name', e.target.value)}/></div><div><label className="form-label" htmlFor="account-phone">Phone number</label><input id="account-phone" className="form-control" autoComplete="tel" value={form.phone} onChange={e => update('phone', e.target.value)}/></div></>}{mode !== 'reset' && <div><label className="form-label" htmlFor="account-email">Email address *</label><input id="account-email" type="email" className="form-control" autoComplete="email" required value={form.email} onChange={e => update('email', e.target.value)}/></div>}{mode !== 'forgot' && <div><label className="form-label" htmlFor="account-password">{mode === 'reset' ? 'New password *' : 'Password *'}</label><div className="auth-password-control"><input id="account-password" type={showPassword ? 'text' : 'password'} minLength={8} autoComplete={mode === 'reset' ? 'new-password' : mode === 'signin' ? 'current-password' : 'new-password'} className="form-control" required value={form.password} onChange={e => update('password', e.target.value)}/><button type="button" className="auth-password-toggle" onClick={() => setShowPassword(visible => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}<span>{showPassword ? 'Hide' : 'Show'}</span></button></div></div>}{error && <p role="alert" className="auth-alert-error">{error}</p>}{message && <p role="status" className="auth-alert-success"><CheckCircle2 size={17} className="shrink-0"/>{message}</p>}{confirmationPending && <button type="button" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await resendSignupConfirmation(form.email); setMessage('A fresh confirmation link has been sent. Check your inbox and spam folder.'); } catch (err) { setError(err instanceof Error ? err.message : 'Could not resend the confirmation email.'); } finally { setBusy(false); } }} className="auth-text-button">Resend confirmation email</button>}<button disabled={busy} className="btn-primary auth-submit">{busy ? <><Loader2 size={17} className="animate-spin"/> Please wait…</> : mode === 'signin' ? 'Sign in to your account' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : 'Update password'}</button>{mode === 'signin' && <div className="auth-forgot"><button type="button" onClick={() => changeMode('forgot')}>Forgot password?</button></div>}<p className="auth-switch">{mode === 'signup' ? 'Already have an account?' : mode === 'signin' ? 'New to NexxaCraft?' : 'Remember your password?'} <button type="button" onClick={() => changeMode(mode === 'signup' || mode === 'forgot' || mode === 'reset' ? 'signin' : 'signup')}>{mode === 'signup' || mode === 'forgot' || mode === 'reset' ? 'Sign in' : 'Create an account'}</button></p></form>
-      </div>
+      </>}</div>
     </div></div>
   </section>;
 };

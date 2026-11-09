@@ -752,7 +752,11 @@
 
 @layer components {
   .home-hero-letter { display:inline-block; opacity:0; animation:home-letter-in 600ms cubic-bezier(.2,.7,.2,1) both; }
-  .home-hero-letter-red { color:#ef4444; }
+  .home-hero-letter-red { color:#ef4444; animation-name:home-letter-in,home-finished-color; animation-duration:600ms,5.5s; animation-delay:var(--letter-delay,0ms),0s; animation-timing-function:cubic-bezier(.2,.7,.2,1),ease-in-out; animation-iteration-count:1,infinite; animation-fill-mode:both; }
+  .home-hero-title { max-width:100%; text-wrap:balance; overflow-wrap:anywhere; }
+  .home-hero-line { display:block; }
+  .home-hero-unbreakable { display:inline-block; white-space:nowrap; }
+  .home-hero-highlight { width:fit-content; max-width:100%; padding-right:.08em; animation:home-finished-glow 5.5s ease-in-out infinite; }
   .markets-section { position:relative; overflow:hidden; background:linear-gradient(180deg,#f7f9ff 0%,#fff 100%); }
   .market-card { position:relative; border:1px solid #e3e7ee; border-radius:1rem; background:#fff; padding:1.4rem; box-shadow:0 3px 12px rgba(11,18,32,.035); transition:transform 240ms ease,border-color 240ms ease,box-shadow 240ms ease; }
   .market-card:hover { transform:translateY(-3px); border-color:#bfd0ff; box-shadow:0 14px 28px -18px rgba(3,65,252,.28); }
@@ -815,11 +819,23 @@
 }
 
 @keyframes home-letter-in { from { opacity:0; transform:translateY(.35em); filter:blur(4px); } to { opacity:1; transform:translateY(0); filter:blur(0); } }
+@keyframes home-finished-color {
+  0%,100% { color:#ef4444; text-shadow:0 0 0 rgba(239,68,68,0); }
+  50% { color:#0341fc; text-shadow:0 0 .38em rgba(3,65,252,.34); }
+}
+@keyframes home-finished-glow {
+  0%,100% { filter:drop-shadow(0 0 .08em rgba(239,68,68,.12)); }
+  50% { filter:drop-shadow(0 0 .42em rgba(3,65,252,.32)); }
+}
+@media (max-width: 640px) {
+  .home-hero-title { max-width:14ch; font-size:clamp(2.35rem,11vw,3.6rem); line-height:1.03; }
+  .home-hero-line { max-width:100%; }
+}
 @media (max-width: 900px) { .footer-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width: 700px) { .owner-profile-card { align-items:flex-start; flex-wrap:wrap; padding:1.2rem; } .owner-profile-card > a { width:100%; justify-content:center; } }
 @media (max-width: 600px) { .footer-cta { align-items:flex-start; flex-direction:column; padding:1.25rem; } .footer-grid { grid-template-columns:1fr 1fr; gap:1.6rem 1rem; padding-top:2rem; } .footer-brand { grid-column:1 / -1; } .contact-info-panel, .contact-form-panel { padding:1.1rem; } .testimonial-card { padding:1.15rem; } }
 @media (min-width: 700px) { .clientele-panel { padding:1.8rem; } .client-logo-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } .client-logo-grid a:nth-child(n+3) { display:flex; } }
-@media (prefers-reduced-motion: reduce) { .home-hero-letter { opacity:1; animation:none; } .market-card, .carousel-arrow, .footer-social { transition:none; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .home-hero-letter { opacity:1; animation:none; color:inherit; text-shadow:none; } .home-hero-highlight { animation:none; filter:none; color:#0341fc; } .market-card, .carousel-arrow, .footer-social { transition:none; transform:none; } }
 @layer components {
   .hero-video-wrap { isolation:isolate; background:#070b16; }
   .hero-video-wrap > video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
@@ -995,6 +1011,26 @@ html[data-theme='dark'] .auth-switch { border-color:rgba(148,163,184,.22); color
 html[data-theme='dark'] .auth-forgot button,
 html[data-theme='dark'] .auth-text-button,
 html[data-theme='dark'] .auth-switch button { color:#9db4ff; }
+/* Distinct signup-complete surface, using the same glass language as the account form. */
+.auth-confirmation-card { max-width:34rem; }
+.auth-confirmation-content { display:flex; flex-direction:column; align-items:center; text-align:center; }
+.auth-confirmation-icon { display:grid; width:4rem; height:4rem; place-items:center; border:1px solid rgba(3,65,252,.2); border-radius:1.25rem; background:linear-gradient(145deg,#eef3ff,#fff); color:#0341fc; box-shadow:0 14px 32px -18px rgba(3,65,252,.55); }
+.auth-confirmation-kicker { margin-top:1.25rem; color:#0341fc; font-size:.68rem; font-weight:850; letter-spacing:.18em; }
+.auth-confirmation-content h2 { margin-top:.55rem; color:#0b1220; font-size:clamp(1.55rem,4vw,2rem); font-weight:850; letter-spacing:-.04em; line-height:1.15; }
+.auth-confirmation-copy { max-width:28rem; margin-top:.75rem; color:#52627a; font-size:.9rem; line-height:1.7; overflow-wrap:anywhere; }
+.auth-confirmation-copy strong { color:#15213a; }
+.auth-confirmation-note { display:flex; align-items:flex-start; gap:.65rem; width:100%; margin-top:1.25rem; border:1px solid rgba(3,65,252,.14); border-radius:.9rem; background:rgba(238,243,255,.78); padding:.85rem 1rem; color:#334155; font-size:.78rem; line-height:1.55; text-align:left; }
+.auth-confirmation-dot { width:.55rem; height:.55rem; flex:0 0 .55rem; margin-top:.22rem; border-radius:50%; background:#ef4444; box-shadow:0 0 0 .22rem rgba(239,68,68,.12); }
+.auth-confirmation-resend { width:100%; margin-top:1rem; }
+.auth-confirmation-content .auth-submit { width:100%; margin-top:.7rem; }
+html[data-theme='dark'] .auth-confirmation-icon { border-color:#33445e; background:linear-gradient(145deg,#1b2b48,#111c2e); color:#9db4ff; }
+html[data-theme='dark'] .auth-confirmation-kicker { color:#9db4ff; }
+html[data-theme='dark'] .auth-confirmation-content h2 { color:#f8fafc; }
+html[data-theme='dark'] .auth-confirmation-copy { color:#b9c7db; }
+html[data-theme='dark'] .auth-confirmation-copy strong { color:#fff; }
+html[data-theme='dark'] .auth-confirmation-note { border-color:#33445e; background:rgba(27,43,72,.7); color:#dbe5f5; }
+html[data-theme='dark'] .auth-confirmation-resend { border-color:#526887; background:rgba(17,28,46,.56); color:#e2e8f0; }
+html[data-theme='dark'] .auth-confirmation-resend:hover { border-color:#7895ff; background:#1b2b48; }
 
 /* The active route stays unmistakable; hover uses the same Nexxa blue treatment. */
 .nav-link {
@@ -1159,4 +1195,10 @@ html[data-theme='dark'] .service-tag { background:#1b2b48; color:#b9caff; }
   .auth-glass-card { padding:1rem; }
   .footer-grid { grid-template-columns:1fr; }
 }
+@media (prefers-reduced-motion: no-preference) {
+  .auth-confirmation-card { animation:auth-confirmation-in 520ms cubic-bezier(.2,.75,.2,1) both; }
+  .auth-confirmation-icon { animation:auth-confirmation-pulse 3.8s ease-in-out 520ms infinite; }
+}
+@keyframes auth-confirmation-in { from { opacity:0; transform:translateY(14px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes auth-confirmation-pulse { 0%,100% { box-shadow:0 14px 32px -18px rgba(3,65,252,.55); } 50% { box-shadow:0 16px 38px -14px rgba(239,68,68,.34); } }
 @media (prefers-reduced-motion: reduce) { .theme-toggle { transition:none; } }
