@@ -33,7 +33,7 @@ export interface ListExpensesOptions {
 /**
  * Expenses, newest expense date first.
  *
- * Access (RLS): super_admin, admin, finance. Other roles receive no rows.
+ * Access (RLS): admin, finance. Other roles receive no rows.
  */
 export async function listExpenses(options: ListExpensesOptions = {}): Promise<ExpenseRow[]> {
   const client = getClient();
@@ -62,7 +62,7 @@ export interface NewExpense {
 /**
  * Records an expense and returns it.
  *
- * Access (RLS): super_admin, admin, finance.
+ * Access (RLS): admin, finance.
  */
 export async function createExpense(input: NewExpense): Promise<ExpenseRow> {
   const client = getClient();

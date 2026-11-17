@@ -31,7 +31,7 @@ export const COMPANY_SETTING_DEFAULTS: Readonly<Record<string, string>> = {
  * Saved settings as `key → string` (only keys that exist in the table). JSON values that are not
  * strings are converted with `String()`, exactly as the staff portal does.
  *
- * Access (RLS): super_admin and admin only — other users (and the public site) receive `{}`.
+ * Access (RLS): admin and admin only — other users (and the public site) receive `{}`.
  */
 export async function loadCompanySettings(): Promise<Record<string, string>> {
   const client = getClient();
@@ -61,7 +61,7 @@ export async function loadPublicCompanySettings(): Promise<Record<string, string
  * Saves settings with the same upsert as the staff portal: one row per key
  * `{ setting_key, setting_value, updated_by }`, conflict target `setting_key`.
  *
- * Access (RLS): super_admin, admin.
+ * Access (RLS): admin.
  */
 export async function saveCompanySettings(values: Record<string, string>, userId?: string): Promise<void> {
   const client = getClient();

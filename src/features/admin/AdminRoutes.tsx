@@ -61,7 +61,7 @@ const MODULE_ROUTES: Array<{ path: string; module: AdminModuleId; Component: Laz
   { path: 'settings', module: 'settings', Component: SettingsPage },
 ];
 
-/** /admin lands on the company dashboard for owners/admins and on the department workspace for everyone else. */
+/** /admin lands on the company dashboard for administrators and on the department workspace for everyone else. */
 function AdminHome() {
   const { role, can } = useAdmin();
   if (can('dashboard')) {

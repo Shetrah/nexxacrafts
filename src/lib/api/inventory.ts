@@ -36,7 +36,7 @@ export interface ListInventoryOptions {
 /**
  * Stock items sorted by name.
  *
- * Access (RLS): super_admin, admin, finance, production_manager, print_operator, laser_operator.
+ * Access (RLS): admin, finance, production_manager, print_operator, laser_operator.
  * Other roles receive no rows.
  */
 export async function listInventory(options: ListInventoryOptions = {}): Promise<InventoryItemRow[]> {
@@ -69,7 +69,7 @@ export interface ListInventoryMovementsOptions {
 /**
  * Stock movements, newest first.
  *
- * Access (RLS): super_admin, admin, finance, production_manager, print_operator, laser_operator.
+ * Access (RLS): admin, finance, production_manager, print_operator, laser_operator.
  */
 export async function listInventoryMovements(
   options: ListInventoryMovementsOptions = {},
@@ -101,7 +101,7 @@ export interface NewInventoryItem {
 /**
  * Creates a stock item (same fields as the staff portal's "Add stock item" form) and returns it.
  *
- * Access (RLS): super_admin, admin, finance, production_manager.
+ * Access (RLS): admin, finance, production_manager.
  */
 export async function createInventoryItem(input: NewInventoryItem): Promise<InventoryItemRow> {
   const client = getClient();
@@ -138,7 +138,7 @@ type InventoryItemUpdate = Partial<
  * Updates a stock item's details and returns the updated row. Throws when nothing was updated
  * (missing item, or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, finance, production_manager.
+ * Access (RLS): admin, finance, production_manager.
  */
 export async function updateInventoryItem(id: string, patch: InventoryItemPatch): Promise<InventoryItemRow> {
   const client = getClient();

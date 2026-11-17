@@ -26,7 +26,7 @@ import { listProofs, type ProofReviewWithContext } from './proofs';
  * Status update: the single existing implementation in `src/lib/platform.ts` (falls back to the
  * browser demo store when Supabase is not configured). Does not detect updates blocked by RLS.
  *
- * Access (RLS): super_admin, admin, sales, finance, production_manager, dispatch.
+ * Access (RLS): admin, sales, finance, production_manager, dispatch.
  */
 export { updateOrderStatus } from '@/lib/platform';
 
@@ -181,7 +181,7 @@ export interface OrderFieldsPatch {
  * Updates an order's due date and/or assignee and returns the updated row. Throws when nothing
  * was updated (missing order, or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, sales, finance, production_manager, dispatch.
+ * Access (RLS): admin, sales, finance, production_manager, dispatch.
  */
 export async function updateOrderFields(id: string, patch: OrderFieldsPatch): Promise<OrderRow> {
   const client = getClient();

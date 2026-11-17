@@ -109,7 +109,7 @@ export interface ListProductionJobsOptions {
 /**
  * Production jobs with their order line and order, newest first.
  *
- * Access (RLS): super_admin, admin, production_manager, designer, print_operator, laser_operator,
+ * Access (RLS): admin, production_manager, designer, print_operator, laser_operator,
  * developer, dispatch. Customers, sales and finance receive no rows.
  */
 export async function listProductionJobs(options: ListProductionJobsOptions = {}): Promise<ProductionJobWithContext[]> {
@@ -173,7 +173,7 @@ export interface JobPatch {
  * now; when it changes to `completed`, `completed_at` is set to now. Throws when nothing was
  * updated (missing job, or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, production_manager, designer, print_operator, laser_operator,
+ * Access (RLS): admin, production_manager, designer, print_operator, laser_operator,
  * developer, dispatch.
  */
 export async function updateJob(

@@ -19,7 +19,7 @@ const PROFILE_COLUMNS = columnsOf<ProfileRow>()('id, full_name, phone, company, 
 /**
  * Every staff profile (role other than `customer`), sorted by name.
  *
- * Access (RLS): profiles are readable by super_admin, admin, sales, finance and production_manager.
+ * Access (RLS): profiles are readable by admin, sales, finance and production_manager.
  * Every other role receives only their own profile.
  */
 export async function listStaffProfiles(): Promise<ProfileRow[]> {
@@ -41,7 +41,7 @@ export interface ListCustomerProfilesOptions {
 /**
  * Customer profiles, newest first.
  *
- * Access (RLS): super_admin, admin, sales, finance, production_manager.
+ * Access (RLS): admin, sales, finance, production_manager.
  */
 export async function listCustomerProfiles(options: ListCustomerProfilesOptions = {}): Promise<ProfileRow[]> {
   const client = getClient();
@@ -58,7 +58,7 @@ export async function listCustomerProfiles(options: ListCustomerProfilesOptions 
 /**
  * A single profile, or `null` when missing or not visible.
  *
- * Access (RLS): your own profile; any profile for super_admin, admin, sales, finance,
+ * Access (RLS): your own profile; any profile for admin, sales, finance,
  * production_manager.
  */
 export async function getProfile(id: string): Promise<ProfileRow | null> {
@@ -78,7 +78,7 @@ export interface MyProfilePatch {
  * Updates the signed-in user's contact details (never the role) and returns the updated profile.
  * Call `refreshProfile()` from `useAuth()` afterwards so the session profile is current.
  *
- * Access (RLS): the profile owner (and super_admin).
+ * Access (RLS): the profile owner (and admin).
  */
 export async function updateMyProfile(userId: string, patch: MyProfilePatch): Promise<ProfileRow> {
   const client = getClient();
@@ -97,11 +97,10 @@ export async function updateMyProfile(userId: string, patch: MyProfilePatch): Pr
 }
 
 /**
- * Changes a user's role and returns the updated profile. Show this only to super admins: the
- * database trigger rejects role changes by anyone else ("Only a super administrator can change
- * staff roles"), and RLS blocks editing other people's profiles.
+ * Changes a user's role and returns the updated profile. Show this only to admins: the database
+ * trigger rejects role changes by other roles, and RLS blocks editing other people's profiles.
  *
- * Access (RLS + trigger): super_admin only.
+ * Access (RLS + trigger): admin only.
  */
 export async function updateProfileRole(id: string, role: AppRole): Promise<ProfileRow> {
   const client = getClient();

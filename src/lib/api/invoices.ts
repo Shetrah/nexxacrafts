@@ -55,7 +55,7 @@ export interface ListInvoicesOptions {
 /**
  * Invoices, newest first.
  *
- * Access (RLS): super_admin, admin, finance and sales read every invoice; customers read invoices
+ * Access (RLS): admin, finance and sales read every invoice; customers read invoices
  * linked to their own orders — including drafts, so customer screens should hide `draft`/`void`.
  */
 export async function listInvoices(options: ListInvoicesOptions = {}): Promise<InvoiceRow[]> {
@@ -109,7 +109,7 @@ function isUniqueViolation(error: unknown): boolean {
  * Creates a draft invoice with a generated invoice number (retried if the number is taken) and
  * returns it. Amounts must be non-negative numbers.
  *
- * Access (RLS): super_admin, admin, finance.
+ * Access (RLS): admin, finance.
  */
 export async function createInvoice(input: NewInvoice): Promise<InvoiceRow> {
   const client = getClient();
@@ -153,7 +153,7 @@ export interface InvoicePatch {
  * Updates an invoice and returns the updated row. Throws when nothing was updated (missing
  * invoice, or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, finance.
+ * Access (RLS): admin, finance.
  */
 export async function updateInvoice(id: string, patch: InvoicePatch): Promise<InvoiceRow> {
   const client = getClient();

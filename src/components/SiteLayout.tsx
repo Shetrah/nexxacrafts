@@ -5,10 +5,11 @@ import { useCart } from '../context/CartContext';
 import { useCompanySettings } from '../context/CompanySettingsContext';
 import { Logo } from './brand/Logo';
 import { company } from '../content/company';
-import { services } from '../lib/catalog';
+import { useCatalog } from '../context/CatalogContext';
 import ThemeToggle from './ThemeToggle';
 
 const SiteLayout: React.FC = () => {
+  const services = useCatalog();
   const [open, setOpen] = useState(false);
   const { count } = useCart();
   const settings = useCompanySettings();

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { services } from '../lib/catalog';
+import { useCatalog } from '../context/CatalogContext';
 import { submitQuote } from '../lib/platform';
 
 const Quote: React.FC = () => {
+  const services = useCatalog();
   const [form, setForm] = useState({ name: '', email: '', phone: '', company: '', serviceSlug: '', description: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

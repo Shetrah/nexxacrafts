@@ -71,7 +71,7 @@ export interface ListProofsOptions {
 /**
  * Proofs with their order line and order, newest first.
  *
- * Access (RLS): super_admin, admin, production_manager and designer read every proof; customers
+ * Access (RLS): admin, production_manager and designer read every proof; customers
  * read proofs on their own orders. Other roles receive no rows. Note: the proof *file* may still
  * be unreadable for the customer — see `createSignedFileUrl`.
  */
@@ -95,7 +95,7 @@ export async function listProofs(options: ListProofsOptions = {}): Promise<Proof
 /**
  * The next version number for an order line's proofs (highest existing version + 1, or 1).
  *
- * Access (RLS): staff with proof access (super_admin, admin, production_manager, designer).
+ * Access (RLS): staff with proof access (admin, production_manager, designer).
  */
 export async function nextProofVersion(orderItemId: string): Promise<number> {
   const client = getClient();
@@ -120,7 +120,7 @@ export interface NewProof {
 /**
  * Records a new proof version (status `awaiting_customer` by database default) and returns it.
  *
- * Access (RLS): super_admin, admin, production_manager, designer.
+ * Access (RLS): admin, production_manager, designer.
  */
 export async function createProof(input: NewProof): Promise<ProofReviewRow> {
   const client = getClient();
@@ -143,7 +143,7 @@ export interface ProofResponse {
  * Approves a proof or requests a revision, stamping `reviewed_at`. Returns the updated row; throws
  * when nothing was updated.
  *
- * Access (RLS): the customer who owns the order, or super_admin, admin, production_manager, designer.
+ * Access (RLS): the customer who owns the order, or admin, production_manager, designer.
  */
 export async function respondToProof(id: string, response: ProofResponse): Promise<ProofReviewRow> {
   const client = getClient();
@@ -163,7 +163,7 @@ export async function respondToProof(id: string, response: ProofResponse): Promi
 /**
  * Sets a proof's status (staff override). Returns the updated row; throws when nothing was updated.
  *
- * Access (RLS): super_admin, admin, production_manager, designer.
+ * Access (RLS): admin, production_manager, designer.
  */
 export async function updateProofStatus(id: string, status: ProofStatus): Promise<ProofReviewRow> {
   const client = getClient();

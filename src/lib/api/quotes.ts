@@ -19,7 +19,7 @@ import {
  * fall back to the browser demo store when Supabase is not configured and do not detect updates
  * blocked by RLS). `saveQuoteAmount` also moves the request to `quoted`.
  *
- * Access (RLS): super_admin, admin, sales.
+ * Access (RLS): admin, sales.
  */
 export { saveQuoteAmount, updateQuoteStatus } from '@/lib/platform';
 
@@ -51,7 +51,7 @@ export interface ListQuotesOptions {
 /**
  * Quote requests (summary columns), newest first.
  *
- * Access (RLS): super_admin, admin, sales and finance read every request; signed-in customers read
+ * Access (RLS): admin, sales and finance read every request; signed-in customers read
  * requests linked to their account (`customer_id`). Anonymous submissions are not linked to any
  * customer and are visible to staff only.
  */
@@ -90,7 +90,7 @@ export interface QuoteFieldsPatch {
  * Updates a request's internal notes and/or assignee and returns the full updated row. Throws when
  * nothing was updated (missing request, or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, sales.
+ * Access (RLS): admin, sales.
  */
 export async function updateQuoteFields(id: string, patch: QuoteFieldsPatch): Promise<QuoteRequestRow> {
   const client = getClient();

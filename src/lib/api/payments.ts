@@ -23,7 +23,7 @@ export interface ListPaymentsOptions {
 /**
  * Payment records, newest first.
  *
- * Access (RLS): super_admin, admin, finance and sales read every payment; customers read the
+ * Access (RLS): admin, finance and sales read every payment; customers read the
  * payments of their own orders. Other staff roles receive no rows.
  */
 export async function listPayments(options: ListPaymentsOptions = {}): Promise<PaymentRow[]> {

@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
 import { CompanySettingsProvider } from './context/CompanySettingsContext';
+import { CatalogProvider } from './context/CatalogContext';
 import { ToastProvider } from './components/ui';
 import { ThemeProvider } from './context/ThemeContext';
 
@@ -37,6 +38,7 @@ function App() {
       <ScrollToTop />
       <AuthProvider>
         <CompanySettingsProvider>
+        <CatalogProvider>
         <CartProvider>
           <ToastProvider>
           <Suspense fallback={<RouteFallback />}>
@@ -63,6 +65,7 @@ function App() {
           </Suspense>
           </ToastProvider>
         </CartProvider>
+        </CatalogProvider>
         </CompanySettingsProvider>
       </AuthProvider>
     </Router>

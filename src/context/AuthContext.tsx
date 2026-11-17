@@ -3,7 +3,6 @@ import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 export type AppRole =
-  | 'super_admin'
   | 'admin'
   | 'sales'
   | 'finance'
@@ -29,7 +28,7 @@ interface AuthContextValue {
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (input: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
+  signUp: (input: { name: string; email: string; password: string; phone?: string; company?: string }) => Promise<void>;
   resendSignupConfirmation: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -112,13 +111,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         await refreshProfile();
       },
-      signUp: async ({ name, email, password, phone }) => {
+      signUp: async ({ name, email, password, phone, company }) => {
         if (!supabase) throw new Error('Connect Supabase to enable account registration.');
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { full_name: name, phone },
+            data: { full_name: name, phone, company },
             emailRedirectTo: `${window.location.origin}/account?confirmed=1`,
           },
         });

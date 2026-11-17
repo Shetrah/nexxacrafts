@@ -2,7 +2,7 @@
  * Private customer files in the `customer-files` storage bucket.
  *
  * Storage RLS: a user may upload only under their own folder (`<user-id>/…`) and read their own
- * folder; staff (all roles except finance) can read every folder; only super_admin/admin may
+ * folder; staff (all roles except finance) can read every folder; only admin/admin may
  * update or delete other users' files. The bucket rejects files over 20 MB and file types outside
  * its allow-list (PNG, JPEG, WEBP, SVG, PDF, PostScript/AI, DXF, ZIP, DOCX, octet-stream).
  */

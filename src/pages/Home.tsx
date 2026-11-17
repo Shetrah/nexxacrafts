@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowRight, ArrowUpRight, BadgeCheck, Box, Clock3, Upload, Layers, MessageSquare, Package, Briefcase, GraduationCap, PartyPopper, ShoppingBasket, MonitorSmartphone, Factory } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { services } from '../lib/catalog';
+import { useCatalog } from '../context/CatalogContext';
 import ScrollReveal from '../components/ScrollReveal';
 import TestimonialCarousel from '../components/TestimonialCarousel';
 import { Logo } from '../components/brand/Logo';
@@ -23,7 +23,9 @@ function StudioReel() {
   </div>;
 }
 
-const Home: React.FC = () => <>
+const Home: React.FC = () => {
+  const services = useCatalog();
+  return <>
   <section className="hero-shell">
     <div className="container-shell relative z-10 grid lg:grid-cols-[1.08fr_.92fr] gap-12 items-center py-20 lg:py-28">
       <div className="max-w-2xl">
@@ -62,4 +64,5 @@ const Home: React.FC = () => <>
   <TestimonialCarousel />
 
 </>;
+};
 export default Home;

@@ -11,7 +11,6 @@ import type { StaffRole } from '@/types/db';
 
 /** Every role in display order (matches the role select in the staff portal; customer last). */
 export const ALL_ROLES: readonly AppRole[] = [
-  'super_admin',
   'admin',
   'sales',
   'finance',
@@ -26,7 +25,6 @@ export const ALL_ROLES: readonly AppRole[] = [
 
 /** Staff roles in display order (all roles except `customer`). */
 export const STAFF_ROLES: readonly StaffRole[] = [
-  'super_admin',
   'admin',
   'sales',
   'finance',
@@ -39,7 +37,6 @@ export const STAFF_ROLES: readonly StaffRole[] = [
 ];
 
 export const ROLE_LABELS: Readonly<Record<AppRole, string>> = {
-  super_admin: 'Super admin',
   admin: 'Administrator',
   sales: 'Sales',
   finance: 'Finance',
@@ -53,11 +50,8 @@ export const ROLE_LABELS: Readonly<Record<AppRole, string>> = {
 };
 
 export const ROLE_DESCRIPTIONS: Readonly<Record<AppRole, string>> = {
-  super_admin:
-    'Business owner. Full access to every workspace, and the only role that can change staff roles.',
   admin:
-    'Runs the whole workspace: orders, quotations, pricing, production, inventory, finance, projects, ' +
-    'staff and settings. Cannot change roles.',
+    'Manages the full workspace, including staff roles, services, pricing, orders, production, finance, projects and settings.',
   sales: 'Handles quotation requests, pricing rules and customer orders, and can view payments and invoices.',
   finance:
     'Records expenses, issues invoices, manages payment records and stock, and can view quotations and orders.',
@@ -95,24 +89,23 @@ const ALL_STAFF = STAFF_ROLES;
  */
 export const PERMISSIONS = {
   /** profiles: read every profile (others see only their own). */
-  'profiles.readAll': ['super_admin', 'admin', 'sales', 'finance', 'production_manager'],
+  'profiles.readAll': [ 'admin', 'sales', 'finance', 'production_manager'],
   /** profiles: edit anyone's profile and change roles (others edit only their own contact details). */
-  'profiles.manage': ['super_admin'],
+  'profiles.manage': ['admin'],
   /** services: manage the catalogue rows (including inactive services). */
-  'services.manage': ['super_admin', 'admin'],
+  'services.manage': ['admin'],
   /** pricing_rates: read inactive rates and create/update rates. */
-  'pricing.manage': ['super_admin', 'admin', 'sales'],
+  'pricing.manage': ['admin', 'sales'],
   /** quote_requests: read every request. */
-  'quotes.readAll': ['super_admin', 'admin', 'sales', 'finance'],
+  'quotes.readAll': [ 'admin', 'sales', 'finance'],
   /** quote_requests: update status, amount, notes and assignment. */
-  'quotes.update': ['super_admin', 'admin', 'sales'],
+  'quotes.update': [ 'admin', 'sales'],
   /** orders + order_items: read every order. */
   'orders.readAll': ALL_STAFF,
   /** orders: update status, due date, assignment (and any other column). */
-  'orders.update': ['super_admin', 'admin', 'sales', 'finance', 'production_manager', 'dispatch'],
+  'orders.update': [ 'admin', 'sales', 'finance', 'production_manager', 'dispatch'],
   /** order_items: update lines (confirmed amount, production notes). */
   'orderItems.update': [
-    'super_admin',
     'admin',
     'sales',
     'designer',
@@ -122,12 +115,11 @@ export const PERMISSIONS = {
     'production_manager',
   ],
   /** payments: read every payment record. */
-  'payments.readAll': ['super_admin', 'admin', 'finance', 'sales'],
+  'payments.readAll': [ 'admin', 'finance', 'sales'],
   /** payments: update payment records (no role may insert them from the browser). */
-  'payments.update': ['super_admin', 'admin', 'finance'],
+  'payments.update': [ 'admin', 'finance'],
   /** production_jobs: read and update every job (customers cannot see jobs at all). */
   'production.manage': [
-    'super_admin',
     'admin',
     'production_manager',
     'designer',
@@ -137,30 +129,29 @@ export const PERMISSIONS = {
     'dispatch',
   ],
   /** proof_reviews: read every proof, upload new versions and change proof status. */
-  'proofs.manage': ['super_admin', 'admin', 'production_manager', 'designer'],
+  'proofs.manage': [ 'admin', 'production_manager', 'designer'],
   /** inventory_items: read stock levels. */
-  'inventory.read': ['super_admin', 'admin', 'finance', 'production_manager', 'print_operator', 'laser_operator'],
+  'inventory.read': [ 'admin', 'finance', 'production_manager', 'print_operator', 'laser_operator'],
   /** inventory_items: create and edit stock items. */
-  'inventory.manage': ['super_admin', 'admin', 'finance', 'production_manager'],
+  'inventory.manage': [ 'admin', 'finance', 'production_manager'],
   /** inventory_movements: read and record movements. */
-  'inventory.movements': ['super_admin', 'admin', 'finance', 'production_manager', 'print_operator', 'laser_operator'],
+  'inventory.movements': [ 'admin', 'finance', 'production_manager', 'print_operator', 'laser_operator'],
   /** expenses: read and record expenses. */
-  'expenses.manage': ['super_admin', 'admin', 'finance'],
+  'expenses.manage': [ 'admin', 'finance'],
   /** invoices: read every invoice. */
-  'invoices.readAll': ['super_admin', 'admin', 'finance', 'sales'],
+  'invoices.readAll': [ 'admin', 'finance', 'sales'],
   /** invoices: create and update invoices. */
-  'invoices.manage': ['super_admin', 'admin', 'finance'],
+  'invoices.manage': [ 'admin', 'finance'],
   /** projects: read and manage every project. */
-  'projects.manage': ['super_admin', 'admin', 'developer', 'designer', 'production_manager'],
+  'projects.manage': [ 'admin', 'developer', 'designer', 'production_manager'],
   /** project_tasks: read and manage tasks (customers cannot see tasks). */
-  'tasks.manage': ['super_admin', 'admin', 'developer', 'designer', 'production_manager'],
+  'tasks.manage': [ 'admin', 'developer', 'designer', 'production_manager'],
   /** company_settings: read and save settings. */
-  'settings.manage': ['super_admin', 'admin'],
+  'settings.manage': [ 'admin'],
   /** audit_logs: read the audit trail. */
-  'audit.read': ['super_admin', 'admin'],
+  'audit.read': [ 'admin'],
   /** storage customer-files: read (sign URLs for) files in any user's folder. Finance is excluded. */
   'files.readAll': [
-    'super_admin',
     'admin',
     'sales',
     'designer',
@@ -171,7 +162,7 @@ export const PERMISSIONS = {
     'dispatch',
   ],
   /** storage customer-files: update or delete files in any user's folder. */
-  'files.manageAll': ['super_admin', 'admin'],
+  'files.manageAll': [ 'admin'],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

@@ -3,13 +3,14 @@ import { ArrowUpRight, CheckCircle2, Clock3, Mail, MapPin, MessageCircle, Phone,
 import { supabase } from '../lib/supabase';
 import { useCompanySettings } from '../context/CompanySettingsContext';
 import { company } from '../content/company';
-import { services } from '../lib/catalog';
+import { useCatalog } from '../context/CatalogContext';
 import ScrollReveal from './ScrollReveal';
 
 interface FormData { name: string; email: string; phone: string; service: string; message: string }
 const initialFormData: FormData = { name: '', email: '', phone: '', service: '', message: '' };
 
 const ContactSection: React.FC = () => {
+  const services = useCatalog();
   const settings = useCompanySettings();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);

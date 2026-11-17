@@ -21,7 +21,7 @@ export interface ListAuditLogsOptions {
 /**
  * Audit events, newest first.
  *
- * Access (RLS): super_admin, admin. Other roles receive no rows.
+ * Access (RLS): admin. Other roles receive no rows.
  */
 export async function listAuditLogs(options: ListAuditLogsOptions = {}): Promise<AuditLogRow[]> {
   const client = getClient();

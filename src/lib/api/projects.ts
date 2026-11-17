@@ -43,7 +43,7 @@ export interface ListProjectsOptions {
 /**
  * Projects, newest first.
  *
- * Access (RLS): super_admin, admin, developer, designer and production_manager read every project;
+ * Access (RLS): admin, developer, designer and production_manager read every project;
  * customers read projects whose `customer_id` is their own (projects created from the staff form
  * are not linked to a customer).
  */
@@ -82,7 +82,7 @@ export interface NewProject {
 /**
  * Creates a project (status `planning` by database default) and returns it.
  *
- * Access (RLS): super_admin, admin, developer, designer, production_manager.
+ * Access (RLS): admin, developer, designer, production_manager.
  */
 export async function createProject(input: NewProject): Promise<ProjectRow> {
   const client = getClient();
@@ -116,7 +116,7 @@ type ProjectUpdate = Partial<Pick<ProjectRow, 'status' | 'due_date' | 'start_dat
  * Updates a project and returns the updated row. Throws when nothing was updated (missing project,
  * or blocked by RLS).
  *
- * Access (RLS): super_admin, admin, developer, designer, production_manager (and the linked customer).
+ * Access (RLS): admin, developer, designer, production_manager (and the linked customer).
  */
 export async function updateProject(id: string, patch: ProjectPatch): Promise<ProjectRow> {
   const client = getClient();
@@ -156,7 +156,7 @@ export interface ListTasksOptions {
 /**
  * Project tasks, newest first.
  *
- * Access (RLS): super_admin, admin, developer, designer, production_manager. Customers (and every
+ * Access (RLS): admin, developer, designer, production_manager. Customers (and every
  * other role) receive no rows.
  */
 export async function listTasks(options: ListTasksOptions = {}): Promise<ProjectTaskRow[]> {
@@ -206,7 +206,7 @@ export interface NewTask {
 /**
  * Creates a task and returns it.
  *
- * Access (RLS): super_admin, admin, developer, designer, production_manager.
+ * Access (RLS): admin, developer, designer, production_manager.
  */
 export async function createTask(input: NewTask): Promise<ProjectTaskRow> {
   const client = getClient();
@@ -239,7 +239,7 @@ type TaskUpdate = Partial<Pick<ProjectTaskRow, 'status' | 'assigned_to' | 'due_a
  * Updates a task and returns the updated row. Throws when nothing was updated (missing task, or
  * blocked by RLS).
  *
- * Access (RLS): super_admin, admin, developer, designer, production_manager.
+ * Access (RLS): admin, developer, designer, production_manager.
  */
 export async function updateTask(id: string, patch: TaskPatch): Promise<ProjectTaskRow> {
   const client = getClient();
