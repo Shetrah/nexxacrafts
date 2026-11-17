@@ -20,7 +20,7 @@ import {
 } from './client';
 
 const INVOICE_COLUMNS = columnsOf<InvoiceRow>()(
-  'id, order_id, invoice_number, customer_name, customer_email, subtotal, tax, total, amount_paid, status, due_date, issued_at, created_by, created_at',
+  'id, order_id, invoice_number, customer_name, customer_email, subtotal, tax, total, amount_paid, status, due_date, issued_at, sent_at, created_by, created_at',
 );
 
 const BASE36 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -167,5 +167,11 @@ export async function updateInvoice(id: string, patch: InvoicePatch): Promise<In
     return current;
   }
   const response = await client.from('invoices').update(payload).eq('id', id).select(INVOICE_COLUMNS);
+  return expectUpdatedRow<InvoiceRow>(response);
+}
+
+export async function markInvoiceSent(id: string): Promise<InvoiceRow> {
+  const client = getClient();
+  const response = await client.from('invoices').update({ sent_at: new Date().toISOString() }).eq('id', id).select(INVOICE_COLUMNS);
   return expectUpdatedRow<InvoiceRow>(response);
 }

@@ -323,6 +323,7 @@ export interface InvoiceRow {
   /** `YYYY-MM-DD`. */
   due_date: string | null;
   issued_at: string | null;
+  sent_at: string | null;
   created_by: string | null;
   created_at: string;
 }

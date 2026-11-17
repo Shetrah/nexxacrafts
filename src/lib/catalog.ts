@@ -62,8 +62,8 @@ export const services: ServiceDefinition[] = [
     image: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=85',
     fields: [
       { name: 'material', label: 'Material', type: 'select', required: true, options: ['Standard frontlit banner', 'Premium frontlit banner', 'Backlit material', 'Mesh banner', 'Roll-up display material', 'Other / advise me'] },
-      { name: 'width', label: 'Width (metres)', type: 'number', min: 0.1, step: 0.01, required: true },
-      { name: 'height', label: 'Height (metres)', type: 'number', min: 0.1, step: 0.01, required: true },
+      { name: 'width', label: 'Width (cm)', type: 'number', min: 1, step: 0.1, required: true, help: 'Enter centimetres. Converted to m² automatically for pricing.' },
+      { name: 'height', label: 'Height (cm)', type: 'number', min: 1, step: 0.1, required: true, help: 'Enter centimetres. Converted to m² automatically for pricing.' },
       { name: 'quantity', label: 'Quantity', type: 'number', min: 1, step: 1, required: true },
       { name: 'sides', label: 'Print sides', type: 'select', options: ['Single-sided', 'Double-sided'] },
       { name: 'finishing', label: 'Finishing', type: 'select', options: ['No finishing', 'Hemming', 'Eyelets', 'Hemming + eyelets', 'Pole pockets', 'Advise me'] },
@@ -135,4 +135,4 @@ export const services: ServiceDefinition[] = [
   },
 ];
 
-export const money = (value: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', maximumFractionDigits: 0 }).format(value);
+export const money = (value: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);

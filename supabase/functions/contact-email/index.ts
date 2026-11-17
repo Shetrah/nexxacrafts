@@ -94,9 +94,9 @@ function buildCustomerOrderEmail(order: Record<string, unknown>, items: Array<Re
   const total = unpriced ? 'Final amount to be confirmed' : money(order.total);
   const reference = esc(order.reference);
   const customerName = esc(order.customer_name) || 'there';
-  const intro = `We’ve received your order request, ${customerName}. Our team will review the specifications and confirm the final amount before requesting payment.`;
+  const intro = `We’ve received your order request, ${customerName}. Our team will review the specifications and send your final invoice once the amount is approved.`;
   const textItems = items.map((item) => `${asText(item.service_name, 120)} × ${Number(item.quantity) || 1}: ${item.estimated_amount == null ? 'To be quoted' : money(item.estimated_amount)}`).join('\n');
-  const text = `NexxaCraft order received\nReference: ${asText(order.reference, 60)}\n\n${intro}\n\nQuotation summary\n${textItems}\n\n${estimateLabel}: ${total}\nPreferred payment method: ${asText(order.payment_method, 30).toUpperCase()}\n\nThis is an estimate, not a final invoice. We will send the invoice after the final amount is approved. A receipt will be sent after payment is confirmed.`;
+  const text = `NexxaCraft order received\nReference: ${asText(order.reference, 60)}\n\n${intro}\n\nOrder estimate\n${textItems}\n\n${estimateLabel}: ${total}\nPreferred payment method: ${asText(order.payment_method, 30).toUpperCase()}\n\nThis is an order acknowledgement and estimate, not an invoice. We will email the invoice after the final amount is approved. A receipt will be sent after payment is confirmed.`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
 <body style="margin:0;padding:0;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Order ${reference} received. Your itemized quotation summary is inside.</div>
@@ -104,17 +104,17 @@ function buildCustomerOrderEmail(order: Record<string, unknown>, items: Array<Re
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 14px 36px rgba(13,32,70,.1)">
       <tr><td style="height:5px;background:#0341fc;font-size:0;line-height:0">&nbsp;</td></tr>
       <tr><td style="padding:25px 30px;background:#101b34"><div style="font-size:23px;line-height:28px;font-weight:800;letter-spacing:-.6px"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;line-height:15px;font-weight:700;letter-spacing:1.7px;text-transform:uppercase">Design&nbsp; · &nbsp;Print&nbsp; · &nbsp;Build</div></td></tr>
-      <tr><td style="padding:30px 30px 12px"><div style="color:#0341fc;font-size:10px;line-height:16px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase">Order confirmation</div><h1 style="margin:8px 0 0;color:#111c32;font-size:27px;line-height:34px;letter-spacing:-.5px">We’ve got your request.</h1><p style="margin:12px 0 0;color:#596780;font-size:14px;line-height:23px">${intro}</p>
+      <tr><td style="padding:30px 30px 12px"><div style="color:#0341fc;font-size:10px;line-height:16px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase">Order acknowledgement</div><h1 style="margin:8px 0 0;color:#111c32;font-size:27px;line-height:34px;letter-spacing:-.5px">We’ve got your request.</h1><p style="margin:12px 0 0;color:#596780;font-size:14px;line-height:23px">${intro}</p>
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:19px"><tr><td style="border:1px solid #dce6ff;border-radius:999px;background:#f0f4ff;padding:8px 12px;color:#123bba;font-size:11px;line-height:16px;font-weight:800;letter-spacing:.5px">ORDER&nbsp;&nbsp;${reference}</td></tr></table>
       </td></tr>
       <tr><td style="padding:14px 30px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e2e8f2;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden"><tr style="background:#f0f4fb"><th align="left" style="padding:11px 14px;color:#68758b;font:700 10px/15px Arial,Helvetica,sans-serif;letter-spacing:1px;text-transform:uppercase">Service</th><th align="center" style="padding:11px 10px;color:#68758b;font:700 10px/15px Arial,Helvetica,sans-serif;letter-spacing:1px;text-transform:uppercase">Qty</th><th align="right" style="padding:11px 14px;color:#68758b;font:700 10px/15px Arial,Helvetica,sans-serif;letter-spacing:1px;text-transform:uppercase">Estimate</th></tr>${rows}</table></td></tr>
       <tr><td style="padding:17px 30px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="padding:13px 14px;border-radius:10px;background:#f0f4ff;color:#344361;font:700 13px/20px Arial,Helvetica,sans-serif">${estimateLabel}</td><td align="right" style="padding:13px 14px;border-radius:10px;background:#f0f4ff;color:#123bba;font:800 15px/20px Arial,Helvetica,sans-serif">${total}</td></tr></table></td></tr>
-      <tr><td style="padding:20px 30px 28px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-left:3px solid #ef4444;background:#fff8f6"><tr><td style="padding:13px 15px;color:#53627a;font-size:12px;line-height:20px"><strong style="color:#17243a">What happens next</strong><br>This quotation is an estimate while our team checks your order details. We’ll email the final invoice once the amount is approved. A payment receipt is sent only after your payment is confirmed.</td></tr></table>
+      <tr><td style="padding:20px 30px 28px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-left:3px solid #ef4444;background:#fff8f6"><tr><td style="padding:13px 15px;color:#53627a;font-size:12px;line-height:20px"><strong style="color:#17243a">What happens next</strong><br>This order acknowledgement includes a preliminary estimate. We’ll email your final invoice once the amount is approved. A payment receipt is sent only after your payment is confirmed.</td></tr></table>
         <p style="margin:20px 0 0;color:#596780;font-size:12px;line-height:20px">Preferred payment method: <strong style="color:#17243a">${esc(order.payment_method).toUpperCase()}</strong><br>Delivery: <strong style="color:#17243a">${esc(asText(order.delivery_method, 40).replace(/_/g, ' '))}</strong></p>
         <div style="padding-top:19px;text-align:center"><a href="https://nexxacrafts.co.ke/account" style="display:inline-block;border-radius:9px;background:#0341fc;padding:12px 20px;color:#fff;text-decoration:none;font-size:13px;line-height:18px;font-weight:700">View your account</a></div>
       </td></tr>
       <tr><td style="padding:17px 25px;border-top:1px solid #e7edf5;background:#f7f9fc;text-align:center;color:#76839a;font-size:10px;line-height:17px">Need help? Reply to this email and our team will assist you.<br><a href="https://nexxacrafts.co.ke" style="color:#0341fc;text-decoration:none;font-weight:700">nexxacrafts.co.ke</a>&nbsp;&nbsp;·&nbsp;&nbsp;Design · Print · Brand · Digital</td></tr>
-    </table><div style="padding:13px 8px 0;color:#8a96a8;text-align:center;font-size:10px;line-height:16px">This email confirms your order request. It is not a payment receipt.</div>
+    </table><div style="padding:13px 8px 0;color:#8a96a8;text-align:center;font-size:10px;line-height:16px">This email acknowledges your order request. It is not an invoice or payment receipt.</div>
   </td></tr></table>
 </body></html>`;
   return { html, text };
@@ -222,7 +222,7 @@ Deno.serve(async (request) => {
   if (origin && !allowedOrigins.has(origin)) return json({ error: 'Origin not allowed' }, 403, origin);
 
   const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > 12_000) return json({ error: 'Request is too large' }, 413, origin);
+  if (contentLength > 1_000_000) return json({ error: 'Request is too large' }, 413, origin);
 
   let payload: Record<string, unknown>;
   try {
@@ -232,6 +232,80 @@ Deno.serve(async (request) => {
   }
 
   const kind = payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';
+  if (payload.kind === 'invoice') {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const authorization = request.headers.get('authorization');
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
+    if (!supabaseUrl || !anonKey || !serviceKey || !authorization) return json({ error: 'Sign in is required to send an invoice.' }, 401, origin);
+    let authUser: { id?: string };
+    try {
+      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
+      if (!authResponse.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+      authUser = await authResponse.json();
+    } catch { return json({ error: 'Your staff session could not be verified.' }, 401, origin); }
+    if (!authUser.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+    try {
+      const profileQuery = new URLSearchParams({ select: 'role', id: `eq.${authUser.id}` });
+      const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?${profileQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      const profiles = await profileResponse.json();
+      const role = Array.isArray(profiles) ? profiles[0]?.role : null;
+      if (!['admin', 'finance'].includes(role)) return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
+
+      const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
+      if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
+      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at', id: `eq.${invoiceId}` });
+      const invoiceResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}).`);
+      const invoices = await invoiceResponse.json();
+      const invoice = Array.isArray(invoices) ? invoices[0] : null;
+      if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
+      if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
+      const recipient = asText(invoice.customer_email, 254);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return json({ error: 'The invoice needs a valid customer email address.' }, 400, origin);
+      if (!resendKey || !fromEmail) return json({ error: 'Invoice email is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL in Supabase Edge Function secrets.' }, 503, origin);
+
+      const esc = escapeHtml;
+      const currency = (value: unknown) => {
+        const amount = Number(value);
+        return Number.isFinite(amount) ? `KES ${amount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'KES 0.00';
+      };
+      let itemRows = '';
+      let textItems = '';
+      if (invoice.order_id) {
+        const itemsQuery = new URLSearchParams({ select: 'service_name,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
+        const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        if (!itemsResponse.ok) throw new Error(`Invoice order details lookup failed (${itemsResponse.status}).`);
+        const invoiceItems = await itemsResponse.json();
+        itemRows = (Array.isArray(invoiceItems) ? invoiceItems : []).map((item: Record<string, unknown>, index: number) => {
+          const amount = item.confirmed_amount ?? item.estimated_amount;
+          textItems += `${Number(item.quantity) || 1} × ${asText(item.service_name, 140)} — ${currency(amount)}\n`;
+          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4">${esc(asText(item.service_name, 140))}</td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${Number(item.quantity) || 1}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4">${currency(amount)}</td></tr>`;
+        }).join('');
+      }
+      const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
+      const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(Number(invoice.total) - Number(invoice.amount_paid || 0))}\n\nThank you for choosing NexxaCraft.`;
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(Number(invoice.total) - Number(invoice.amount_paid || 0))}</span></div></td></tr><tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="https://nexxacrafts.co.ke" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
+      if (!sent.ok) {
+        const details = (await sent.text()).slice(0, 1000);
+        console.error('Resend rejected invoice email', sent.status, details);
+        return json({ error: `Email provider rejected delivery (${sent.status}). ${details}` }, 502, origin);
+      }
+      const emailResult = await sent.json().catch(() => null);
+      const sentAt = new Date().toISOString();
+      const markQuery = new URLSearchParams({ id: `eq.${invoiceId}` });
+      const markResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${markQuery}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ sent_at: sentAt }) });
+      if (!markResponse.ok) console.error('Invoice email accepted but sent_at could not be saved', markResponse.status, (await markResponse.text()).slice(0, 500));
+      console.log('Resend accepted invoice email', { emailId: emailResult?.id ?? 'unknown', invoiceNumber: invoice.invoice_number, recipient });
+      return json({ ok: true, invoiceEmailSent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
+    } catch (error) {
+      console.error('Could not send invoice email', error);
+      return json({ error: error instanceof Error ? error.message : 'Could not send invoice email.' }, 500, origin);
+    }
+  }
   if (kind === 'order') {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');

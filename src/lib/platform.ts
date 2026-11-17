@@ -68,6 +68,23 @@ export async function submitOrder(input: { name: string; email: string; phone: s
   return { id, reference, mode: 'demo', notificationSent: false };
 }
 
+export async function sendInvoiceEmail(invoiceId: string): Promise<void> {
+  if (!supabase) throw new Error('Connect Supabase before sending an invoice email.');
+  const { data, error } = await supabase.functions.invoke('contact-email', { body: { kind: 'invoice', invoiceId } });
+  if (error) {
+    let message = error.message;
+    try {
+      const response = (error as typeof error & { context?: Response }).context;
+      if (response) {
+        const details = await response.clone().json();
+        if (typeof details?.error === 'string') message = details.error;
+      }
+    } catch { /* Preserve the invocation error if no JSON response details are available. */ }
+    throw new Error(message || 'Could not send the invoice email.');
+  }
+  if (!data?.invoiceEmailSent) throw new Error(data?.error || 'The invoice email was not accepted by the email provider.');
+}
+
 export function getDemoRecords(kind: 'quotes' | 'orders') { return readDemo(DEMO_KEYS[kind]); }
 export function isLiveBackend() { return Boolean(supabase); }
 

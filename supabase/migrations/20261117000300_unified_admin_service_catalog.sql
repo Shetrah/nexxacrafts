@@ -217,10 +217,22 @@ begin
     if found then
       if item_slug = 'banner-printing' then
         v_width := nullif(cfg->>'width','')::numeric; v_height := nullif(cfg->>'height','')::numeric;
-        if v_width > 0 and v_height > 0 then item_estimate := round((v_width*v_height*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2); end if;
+        if v_width > 0 and v_height > 0 then
+          if lower(rate_row.unit_label) in ('m²','m2','sqm','square metre','square meter','m² (cm input)','cm → m²') then
+            item_estimate := round((((v_width/100)*(v_height/100))*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          else
+            item_estimate := round((v_width*v_height*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          end if;
+        end if;
       elsif item_slug = 'sticker-printing' then
         v_width := nullif(cfg->>'width','')::numeric; v_height := nullif(cfg->>'height','')::numeric;
-        if v_width > 0 and v_height > 0 then item_estimate := round(((v_width*v_height/100)*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2); end if;
+        if v_width > 0 and v_height > 0 then
+          if lower(rate_row.unit_label) in ('m²','m2','sqm','square metre','square meter','m² (cm input)','cm → m²') then
+            item_estimate := round((((v_width/100)*(v_height/100))*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          else
+            item_estimate := round(((v_width*v_height/100)*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          end if;
+        end if;
       else
         item_estimate := round((item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
       end if;
@@ -239,10 +251,22 @@ begin
     if found then
       if item_slug='banner-printing' then
         v_width := nullif(cfg->>'width','')::numeric; v_height := nullif(cfg->>'height','')::numeric;
-        if v_width>0 and v_height>0 then item_estimate := round((v_width*v_height*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2); end if;
+        if v_width>0 and v_height>0 then
+          if lower(rate_row.unit_label) in ('m²','m2','sqm','square metre','square meter','m² (cm input)','cm → m²') then
+            item_estimate := round((((v_width/100)*(v_height/100))*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          else
+            item_estimate := round((v_width*v_height*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          end if;
+        end if;
       elsif item_slug='sticker-printing' then
         v_width := nullif(cfg->>'width','')::numeric; v_height := nullif(cfg->>'height','')::numeric;
-        if v_width>0 and v_height>0 then item_estimate := round(((v_width*v_height/100)*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2); end if;
+        if v_width>0 and v_height>0 then
+          if lower(rate_row.unit_label) in ('m²','m2','sqm','square metre','square meter','m² (cm input)','cm → m²') then
+            item_estimate := round((((v_width/100)*(v_height/100))*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          else
+            item_estimate := round(((v_width*v_height/100)*item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
+          end if;
+        end if;
       else item_estimate := round((item_qty*rate_row.unit_rate+rate_row.setup_fee)::numeric,2);
       end if;
     end if;
