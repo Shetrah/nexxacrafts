@@ -241,20 +241,29 @@ Deno.serve(async (request) => {
     const authorization = request.headers.get('authorization');
     const resendKey = Deno.env.get('RESEND_API_KEY');
     const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
-    if (!supabaseUrl || !anonKey || !serviceKey || !authorization) return json({ error: 'Sign in is required to send an invoice.' }, 401, origin);
-    let authUser: { id?: string };
+    // The order action calls this function server-to-server after it has already
+    // verified the signed-in customer and created their invoice. Use the service
+    // key as an internal proof so this second hop doesn't depend on forwarding a
+    // short-lived browser JWT. This header is never exposed to the client.
+    const internalCheckout = payload.kind === 'checkout_invoice' && Boolean(serviceKey) && request.headers.get('x-nexxacraft-internal') === serviceKey;
+    if (!supabaseUrl || !anonKey || !serviceKey || (!authorization && !internalCheckout)) return json({ error: 'Sign in is required to send an invoice.' }, 401, origin);
+    let authUser: { id?: string } | null = null;
+    if (!internalCheckout) {
+      try {
+        const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization! } });
+        if (!authResponse.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+        authUser = await authResponse.json();
+      } catch { return json({ error: 'Your staff session could not be verified.' }, 401, origin); }
+      if (!authUser?.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+    }
     try {
-      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
-      if (!authResponse.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
-      authUser = await authResponse.json();
-    } catch { return json({ error: 'Your staff session could not be verified.' }, 401, origin); }
-    if (!authUser.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
-    try {
-      const profileQuery = new URLSearchParams({ select: 'role', id: `eq.${authUser.id}` });
-      const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?${profileQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
-      const profiles = await profileResponse.json();
-      const role = Array.isArray(profiles) ? profiles[0]?.role : null;
-    if (!['admin', 'finance'].includes(role) && payload.kind !== 'checkout_invoice') return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
+      if (!internalCheckout) {
+        const profileQuery = new URLSearchParams({ select: 'role', id: `eq.${authUser!.id}` });
+        const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?${profileQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        const profiles = await profileResponse.json();
+        const role = Array.isArray(profiles) ? profiles[0]?.role : null;
+        if (!['admin', 'finance'].includes(role) && payload.kind !== 'checkout_invoice') return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
+      }
 
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
@@ -265,11 +274,11 @@ Deno.serve(async (request) => {
       const invoice = Array.isArray(invoices) ? invoices[0] : null;
       if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
       if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
-      if (invoice.order_id && payload.kind === 'checkout_invoice') {
+      if (!internalCheckout && invoice.order_id && payload.kind === 'checkout_invoice') {
         const ownerQuery = new URLSearchParams({ select: 'customer_id', id: `eq.${invoice.order_id}`, limit: '1' });
         const ownerResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${ownerQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         const ownerRows = ownerResponse.ok ? await ownerResponse.json() : [];
-        if (!Array.isArray(ownerRows) || ownerRows[0]?.customer_id !== authUser.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
+        if (!Array.isArray(ownerRows) || ownerRows[0]?.customer_id !== authUser?.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
       }
       if (payload.kind === 'checkout_invoice' && invoice.sent_at) return json({ ok: true, invoiceEmailSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
       if (payload.kind === 'checkout_invoice' && invoice.order_id) {
@@ -277,11 +286,12 @@ Deno.serve(async (request) => {
         const orderResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${orderQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         const orderRows = orderResponse.ok ? await orderResponse.json() : [];
         const order = Array.isArray(orderRows) ? orderRows[0] : null;
-        const authHeader = request.headers.get('authorization');
-        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-        const ownerResponse = authHeader && anonKey ? await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } }) : null;
-        const owner = ownerResponse?.ok ? await ownerResponse.json() : null;
-        if (!order || !owner || order.customer_id !== owner.id) return json({ error: 'The order owner could not be verified.' }, 403, origin);
+        if (!order) return json({ error: 'The invoice order could not be verified.' }, 403, origin);
+        if (!internalCheckout) {
+          const ownerResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization! } });
+          const owner = ownerResponse.ok ? await ownerResponse.json() : null;
+          if (!owner || order.customer_id !== owner.id) return json({ error: 'The order owner could not be verified.' }, 403, origin);
+        }
         if (asText(order.customer_email, 254).toLowerCase() !== asText(invoice.customer_email, 254).toLowerCase()) return json({ error: 'The invoice recipient does not match the saved order.' }, 403, origin);
       }
       const recipient = asText(invoice.customer_email, 254);
@@ -296,14 +306,44 @@ Deno.serve(async (request) => {
       let itemRows = '';
       let textItems = '';
       if (invoice.order_id) {
-        const itemsQuery = new URLSearchParams({ select: 'service_name,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
+        const itemsQuery = new URLSearchParams({ select: 'service_slug,service_name,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
         const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         if (!itemsResponse.ok) throw new Error(`Invoice order details lookup failed (${itemsResponse.status}).`);
         const invoiceItems = await itemsResponse.json();
-        itemRows = (Array.isArray(invoiceItems) ? invoiceItems : []).map((item: Record<string, unknown>, index: number) => {
+        const validInvoiceItems = Array.isArray(invoiceItems) ? invoiceItems as Array<Record<string, unknown>> : [];
+        const slugs = [...new Set(validInvoiceItems.map(item => asText(item.service_slug, 100)).filter(Boolean))];
+        const serviceFields = new Map<string, Array<Record<string, unknown>>>();
+        if (slugs.length) {
+          const serviceQuery = new URLSearchParams({ select: 'slug,fields', slug: `in.(${slugs.join(',')})` });
+          const serviceResponse = await fetch(`${supabaseUrl}/rest/v1/services?${serviceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+          if (serviceResponse.ok) {
+            const services = await serviceResponse.json();
+            for (const service of Array.isArray(services) ? services : []) serviceFields.set(asText(service.slug, 100), Array.isArray(service.fields) ? service.fields : []);
+          }
+        }
+        const detailsFor = (item: Record<string, unknown>) => {
+          const configuration = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration) ? item.configuration as Record<string, unknown> : {};
+          const fields = serviceFields.get(asText(item.service_slug, 100)) ?? [];
+          return Object.entries(configuration).flatMap(([key, rawValue]) => {
+            if (rawValue === null || rawValue === undefined || rawValue === '' || rawValue === false) return [];
+            const definition = fields.find(field => field.name === key);
+            const label = asText(definition?.label, 100) || key.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+            let value = typeof rawValue === 'boolean' ? (rawValue ? 'Yes' : 'No') : String(rawValue);
+            if (definition?.type === 'file') {
+              try { const parsed = JSON.parse(value); value = Array.isArray(parsed) ? `${parsed.length} file${parsed.length === 1 ? '' : 's'} attached` : 'File attached'; }
+              catch { value = 'File attached'; }
+            }
+            const optionPrice = definition?.type === 'select' && definition.optionPrices && typeof definition.optionPrices === 'object'
+              ? Number((definition.optionPrices as Record<string, unknown>)[String(rawValue)] ?? 0) : 0;
+            return [{ label, value, optionPrice: Number.isFinite(optionPrice) ? optionPrice : 0 }];
+          });
+        };
+        itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
           const amount = item.confirmed_amount ?? item.estimated_amount;
-          textItems += `${Number(item.quantity) || 1} × ${asText(item.service_name, 140)} — ${currency(amount)}\n`;
-          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4">${esc(asText(item.service_name, 140))}</td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${Number(item.quantity) || 1}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4">${currency(amount)}</td></tr>`;
+          const details = detailsFor(item);
+          const detailHtml = details.map(detail => `<div style="margin-top:4px;color:#64748b;font-size:12px"><strong>${esc(detail.label)}:</strong> ${esc(detail.value)}${detail.optionPrice > 0 ? ` <span style="color:#183db7">(+ ${currency(detail.optionPrice)} per item)</span>` : ''}</div>`).join('');
+          textItems += `${Number(item.quantity) || 1} × ${asText(item.service_name, 140)} — ${currency(amount)}\n${details.map(detail => `  ${detail.label}: ${detail.value}${detail.optionPrice > 0 ? ` (+ ${currency(detail.optionPrice)} per item)` : ''}`).join('\n')}\n`;
+          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(asText(item.service_name, 140))}</strong>${detailHtml}</td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${Number(item.quantity) || 1}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
         }).join('');
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
@@ -397,7 +437,7 @@ Deno.serve(async (request) => {
             const linkResponse = await fetch(`${supabaseUrl}/rest/v1/payments?id=eq.${payment.id}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ invoice_id: invoice.id, amount: savedOrder.total, provider: 'payhero' }) });
             if (!linkResponse.ok) throw new Error(`Invoice payment link failed (${linkResponse.status}).`);
           }
-          const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
+          const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${serviceKey}`, 'x-nexxacraft-internal': serviceKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
           invoiceEmailSent = invoiceEmail.ok && (await invoiceEmail.json().catch(() => ({}))).invoiceEmailSent === true;
           if (!invoiceEmailSent) {
             const detail = await invoiceEmail.json().catch(() => ({}));

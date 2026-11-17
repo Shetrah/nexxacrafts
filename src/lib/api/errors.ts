@@ -168,13 +168,13 @@ export function toErrorMessage(err: unknown, fallback = FALLBACK_MESSAGE): strin
       break;
   }
 
-  // Storage bucket restrictions (customer-files: 20 MB, limited MIME types).
+  // Storage bucket restrictions (customer-files: 100 MB, limited MIME types).
   if (/mime type/i.test(info.message) && /not supported/i.test(info.message)) {
     return 'This file type is not supported. Upload PNG, JPG, WEBP, SVG, PDF, AI/EPS, DXF, ZIP or DOCX files.';
   }
   const tooLarge = info.status === 413 || info.statusCode === '413';
   if (tooLarge || /maximum allowed size|payload too large/i.test(info.message)) {
-    return 'This file is larger than the 20 MB upload limit.';
+    return 'This file is larger than the 100 MB upload limit.';
   }
 
   return info.message.trim() || fallback;

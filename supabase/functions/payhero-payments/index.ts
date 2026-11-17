@@ -26,7 +26,12 @@ async function notifyAdmins(url:string,service:string,paymentId:unknown){
   const paymentRows=await rest(url,service,`payments?select=invoice_id,amount,transaction_reference&id=eq.${encodeURIComponent(id)}`) as Array<Record<string,unknown>>,payment=paymentRows[0];if(!payment)return;
   const invoiceRows=await rest(url,service,`invoices?select=invoice_number,order_id&id=eq.${encodeURIComponent(String(payment.invoice_id))}`) as Array<Record<string,unknown>>,invoice=invoiceRows[0];if(!invoice)return;
   const orderRows=await rest(url,service,`orders?select=customer_name&id=eq.${encodeURIComponent(String(invoice.order_id))}`) as Array<Record<string,unknown>>,order=orderRows[0];
-  const profiles=await rest(url,service,'profiles?select=id&role=eq.admin') as Array<{id:string}>;if(profiles.length)await rest(url,service,'notifications',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(profiles.map(p=>({user_id:p.id,title:'Payment received',message:`${text(order?.customer_name,120)||'A customer'} paid ${money(payment.amount)} for invoice ${text(invoice.invoice_number,80)}${payment.transaction_reference?` (M-Pesa ${text(payment.transaction_reference,50)})`:''}.`,link:'/admin/payments'}))});
+  const profiles=await rest(url,service,'profiles?select=id&role=eq.admin') as Array<{id:string}>;
+  if(profiles.length){
+    const message=`${text(order?.customer_name,120)||'A customer'} paid ${money(payment.amount)} for invoice ${text(invoice.invoice_number,80)}${payment.transaction_reference?` (M-Pesa ${text(payment.transaction_reference,50)})`:''}.`;
+    const notifications=profiles.map(profile=>({user_id:profile.id,title:'Payment received',message,link:'/admin/payments'}));
+    await rest(url,service,'notifications',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(notifications)});
+  }
   await rest(url,service,`payment_admin_notifications?payment_id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({dashboard_notified_at:new Date().toISOString()})});
 }
 
@@ -54,12 +59,11 @@ Deno.serve(async(req)=>{
     }catch(e){console.error('PayHero callback processing failed',e);return json({received:true},200,origin);}
   }
 
-  if(action!=='invoice'&&action!=='initiate'&&action!=='retry-notifications')return json({error:'Unknown payment action.'},400,origin);
-  if(!anon)return json({error:'Payment service is not configured.'},503,origin);
-  const authorization=req.headers.get('authorization');if(!authorization||!anon)return json({error:'Please sign in to pay this invoice.'},401,origin);
-  const userResponse=await fetch(`${url}/auth/v1/user`,{headers:{apikey:anon,Authorization:authorization}});if(!userResponse.ok)return json({error:'Your sign-in session has expired.'},401,origin);
-  const authUser=await userResponse.json() as {id:string};
+  if(action!=='invoice'&&action!=='initiate'&&action!=='status'&&action!=='retry-notifications')return json({error:'Unknown payment action.'},400,origin);
   if(action==='retry-notifications'){
+    const authorization=req.headers.get('authorization');if(!authorization||!anon)return json({error:'Please sign in to retry payment notifications.'},401,origin);
+    const userResponse=await fetch(`${url}/auth/v1/user`,{headers:{apikey:anon,Authorization:authorization}});if(!userResponse.ok)return json({error:'Your sign-in session has expired.'},401,origin);
+    const authUser=await userResponse.json() as {id:string};
     const profiles=await rest(url,service,`profiles?select=role&id=eq.${authUser.id}&limit=1`) as Array<{role:string}>;
     if(!profiles[0]||!['admin','finance'].includes(profiles[0].role))return json({error:'Admin access is required.'},403,origin);
     const paymentId=text(payload.paymentId,50);if(!/^[0-9a-f-]{36}$/i.test(paymentId))return json({error:'A valid payment ID is required.'},400,origin);
@@ -71,17 +75,27 @@ Deno.serve(async(req)=>{
       const iq=new URLSearchParams({select:'id,invoice_number,customer_name,customer_email,total,amount_paid,status,order_id',id:`eq.${invoiceId}`,limit:'1'}),invoices=await rest(url,service,`invoices?${iq}`) as Array<Record<string,unknown>>,invoice=invoices[0];
       if(!invoice||!invoice.order_id||invoice.status==='draft'||invoice.status==='void')return json({error:'This invoice is not available for payment.'},404,origin);
       const oq=new URLSearchParams({select:'id,customer_id,customer_phone,reference',id:`eq.${invoice.order_id}`,limit:'1'}),orders=await rest(url,service,`orders?${oq}`) as Array<Record<string,unknown>>,order=orders[0];
-      if(!order||order.customer_id!==authUser.id)return json({error:'This invoice does not belong to your account.'},403,origin);
-      return json({invoice:{id:invoice.id,invoice_number:invoice.invoice_number,customer_name:invoice.customer_name,total:invoice.total,amount_due:Math.max(0,Number(invoice.total)-Number(invoice.amount_paid)),status:invoice.status},phone:order.customer_phone},200,origin);
+      if(!order)return json({error:'Invoice order details are unavailable.'},404,origin);
+      return json({invoice:{id:invoice.id,invoice_number:invoice.invoice_number,customer_name:invoice.customer_name,customer_email:invoice.customer_email,order_reference:order.reference,total:invoice.total,amount_due:Math.max(0,Number(invoice.total)-Number(invoice.amount_paid)),status:invoice.status},phone:order.customer_phone},200,origin);
     }catch(e){return json({error:e instanceof Error?e.message:'Could not load invoice.'},500,origin);}
+  }
+  if(action==='status'){
+    const invoiceId=text(payload.invoiceId,50);if(!/^[0-9a-f-]{36}$/i.test(invoiceId))return json({error:'Invalid invoice.'},400,origin);
+    try{
+      const query=new URLSearchParams({select:'status,amount,transaction_reference,confirmed_at,receipt_sent_at,created_at',invoice_id:`eq.${invoiceId}`,provider:'eq.payhero',order:'created_at.desc',limit:'1'});
+      const rows=await rest(url,service,`payments?${query}`) as Array<Record<string,unknown>>;
+      const payment=rows[0];if(!payment)return json({payment:null},200,origin);
+      return json({payment:{status:payment.status,amount:payment.amount,transaction_reference:payment.transaction_reference,confirmed_at:payment.confirmed_at,receipt_sent_at:payment.receipt_sent_at}},200,origin);
+    }catch(e){return json({error:e instanceof Error?e.message:'Could not check payment status.'},500,origin);}
   }
   if(action==='initiate'){
     const invoiceId=text(payload.invoiceId,50);let phone='';try{phone=normalizePhone(text(payload.phone,40));}catch(e){return json({error:e instanceof Error?e.message:'Invalid phone number.'},400,origin);}
-    const username=Deno.env.get('PAYHERO_API_USERNAME'),password=Deno.env.get('PAYHERO_API_PASSWORD'),channel=Number(Deno.env.get('PAYHERO_CHANNEL_ID')||6751);
-    if(!username||!password||!Number.isInteger(channel))return json({error:'PayHero is not fully configured.'},503,origin);
+    const username=Deno.env.get('PAYHERO_API_USERNAME')?.trim(),password=Deno.env.get('PAYHERO_API_PASSWORD')?.trim(),basicToken=Deno.env.get('PAYHERO_BASIC_AUTH_TOKEN')?.trim(),channel=Number(Deno.env.get('PAYHERO_CHANNEL_ID')||6751);
+    const authorization=basicToken?(basicToken.startsWith('Basic ')?basicToken:`Basic ${basicToken}`):(username&&password?`Basic ${btoa(`${username}:${password}`)}`:'');
+    if(!authorization||!Number.isInteger(channel))return json({error:'PayHero is not fully configured. Set PAYHERO_BASIC_AUTH_TOKEN or both PAYHERO_API_USERNAME and PAYHERO_API_PASSWORD, plus a valid channel ID.'},503,origin);
     try{
     const iq=new URLSearchParams({select:'id,invoice_number,customer_name,customer_email,total,amount_paid,status,order_id',id:`eq.${invoiceId}`,limit:'1'}),invoices=await rest(url,service,`invoices?${iq}`) as Array<Record<string,unknown>>,invoice=invoices[0];if(!invoice||!invoice.order_id||['draft','void','paid'].includes(text(invoice.status)))return json({error:'This invoice cannot be paid.'},400,origin);
-      const oq=new URLSearchParams({select:'id,customer_id,customer_name,customer_phone',id:`eq.${invoice.order_id}`,limit:'1'}),orders=await rest(url,service,`orders?${oq}`) as Array<Record<string,unknown>>,order=orders[0];if(!order||order.customer_id!==authUser.id)return json({error:'This invoice does not belong to your account.'},403,origin);
+      const oq=new URLSearchParams({select:'id,customer_name,customer_phone',id:`eq.${invoice.order_id}`,limit:'1'}),orders=await rest(url,service,`orders?${oq}`) as Array<Record<string,unknown>>,order=orders[0];if(!order)return json({error:'Invoice order details are unavailable.'},404,origin);
       const amount=Math.ceil(Number(invoice.total)-Number(invoice.amount_paid));if(!Number.isFinite(amount)||amount<1)return json({error:'Invoice has no balance due.'},400,origin);
       const activeQuery=new URLSearchParams({select:'id',invoice_id:`eq.${invoice.id}`,provider:'eq.payhero',status:'in.(pending,initiated)',limit:'1'}),activeRows=await rest(url,service,`payments?${activeQuery}`) as Array<{id:string}>;
       if(activeRows.length)return json({error:'There is already an M-Pesa request awaiting a response. Complete or wait for it before requesting another prompt.'},409,origin);
@@ -94,8 +108,15 @@ Deno.serve(async(req)=>{
       }
       if(!payment?.id)return json({error:'Could not start an M-Pesa request.'},502,origin);
       const callbackUrl=`${url}/functions/v1/payhero-payments?action=callback`;
-      const response=await fetch('https://backend.payhero.co.ke/api/v2/payments',{method:'POST',headers:{Authorization:`Basic ${btoa(`${username}:${password}`)}`,'Content-Type':'application/json'},body:JSON.stringify({amount,phone_number:phone,channel_id:channel,provider:'m-pesa',external_reference:externalRef,customer_name:text(invoice.customer_name,120),callback_url:callbackUrl})});
-      const data=await response.json().catch(()=>({}));if(!response.ok||data.success!==true){await rest(url,service,`payments?id=eq.${payment.id}`,{method:'PATCH',body:JSON.stringify({status:'failed',failure_reason:text(data.message,300)||'PayHero could not start the payment.'})});return json({error:text(data.message,300)||'PayHero could not start the M-Pesa prompt.'},502,origin);}
+      const response=await fetch('https://backend.payhero.co.ke/api/v2/payments',{method:'POST',headers:{Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({amount,phone_number:phone,channel_id:channel,provider:'m-pesa',external_reference:externalRef,customer_name:text(invoice.customer_name,120),callback_url:callbackUrl})});
+      const responseBody=await response.text();let data:Record<string,unknown>={};try{data=JSON.parse(responseBody) as Record<string,unknown>;}catch{/* Provider may return an empty or non-JSON response. */}
+      if(!response.ok||data.success!==true){
+        const providerMessage=text(data.message??data.error??data.detail??data.description,300);
+        const failureReason=`PayHero HTTP ${response.status}${providerMessage?`: ${providerMessage}`:''}`;
+        console.error('PayHero rejected the STK push request',{status:response.status,channel,providerMessage,externalReference:externalRef});
+        await rest(url,service,`payments?id=eq.${payment.id}`,{method:'PATCH',body:JSON.stringify({status:'failed',failure_reason:failureReason})});
+        return json({error:`PayHero rejected the M-Pesa request (HTTP ${response.status}).${providerMessage?` ${providerMessage}`:''}`},502,origin);
+      }
       if(typeof data.reference==='string')await rest(url,service,`payments?id=eq.${payment.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({transaction_reference:`PayHero ${data.reference}`})});
       return json({ok:true,paymentId:payment.id,reference:externalRef,status:data.status||'QUEUED'},200,origin);
     }catch(e){console.error('Could not initiate PayHero payment',e);return json({error:e instanceof Error?e.message:'Could not start M-Pesa payment.'},500,origin);}

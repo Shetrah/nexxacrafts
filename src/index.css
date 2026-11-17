@@ -1044,6 +1044,46 @@ html[data-theme='dark'] [class~='bg-white/60'] { background-color:#111c2e; }
 html[data-theme='dark'] [class~='bg-slate-50'],
 html[data-theme='dark'] [class~='bg-slate-100'],
 html[data-theme='dark'] [class~='bg-[#f3f5f9]'] { background-color:#0f192a; }
+html[data-theme='dark'] .form-panel,
+html[data-theme='dark'] .summary-panel,
+html[data-theme='dark'] .cart-item,
+html[data-theme='dark'] .empty-state,
+html[data-theme='dark'] .file-row { border-color:#2b3a51; background:#111c2e; color:#e2e8f0; }
+html[data-theme='dark'] .config-chip { border-color:#33445e; background:#1b2b48; color:#d4def0; }
+html[data-theme='dark'] [class~='bg-blue-50'] { background-color:#172a49; }
+html[data-theme='dark'] [class~='bg-blue-100'],
+html[data-theme='dark'] [class~='bg-brand-50'],
+html[data-theme='dark'] [class~='bg-brand-100'],
+html[data-theme='dark'] [class~='bg-primary-50'] { background-color:#1b2b48; }
+html[data-theme='dark'] [class~='bg-emerald-50'] { background-color:#10352f; }
+html[data-theme='dark'] [class~='bg-amber-50'] { background-color:#392c18; }
+html[data-theme='dark'] [class~='bg-red-50'] { background-color:#3b2029; }
+html[data-theme='dark'] [class~='bg-info-50'] { background-color:#172a49; }
+html[data-theme='dark'] [class~='bg-success-50'] { background-color:#10352f; }
+html[data-theme='dark'] [class~='bg-warning-50'] { background-color:#392c18; }
+html[data-theme='dark'] [class~='bg-danger-50'] { background-color:#3b2029; }
+html[data-theme='dark'] [class~='bg-violet-50'],
+html[data-theme='dark'] [class~='bg-rose-100'],
+html[data-theme='dark'] [class~='bg-teal-100'] { background-color:#20223e; }
+html[data-theme='dark'] [class~='text-blue-700'],
+html[data-theme='dark'] [class~='text-blue-800'],
+html[data-theme='dark'] [class~='text-brand-700'],
+html[data-theme='dark'] [class~='text-primary-700'],
+html[data-theme='dark'] [class~='text-info-700'],
+html[data-theme='dark'] [class~='text-info-800'] { color:#c1d0ff; }
+html[data-theme='dark'] [class~='text-emerald-700'],
+html[data-theme='dark'] [class~='text-emerald-800'],
+html[data-theme='dark'] [class~='text-success-700'],
+html[data-theme='dark'] [class~='text-success-800'] { color:#a7f3d0; }
+html[data-theme='dark'] [class~='text-amber-700'],
+html[data-theme='dark'] [class~='text-amber-800'],
+html[data-theme='dark'] [class~='text-amber-900'],
+html[data-theme='dark'] [class~='text-warning-700'],
+html[data-theme='dark'] [class~='text-warning-800'] { color:#fcd98c; }
+html[data-theme='dark'] [class~='text-red-700'],
+html[data-theme='dark'] [class~='text-red-800'],
+html[data-theme='dark'] [class~='text-danger-700'],
+html[data-theme='dark'] [class~='text-danger-800'] { color:#fecdd3; }
 html[data-theme='dark'] .site-header { border-color:#263349; background-color:rgba(11,18,32,.94); }
 html[data-theme='dark'] #mobile-navigation { border-color:#263349; background-color:#111c2e; }
 html[data-theme='dark'] .text-slate-950,
@@ -1091,6 +1131,27 @@ html[data-theme='dark'] .about-principle { border-color:#2b3a51; background:#111
 html[data-theme='dark'] .owner-label { color:#93aeff; }
 html[data-theme='dark'] .about-principle:hover,
 html[data-theme='dark'] .owner-profile-card:hover { border-color:#5f83ff; }
+html[data-theme='dark'] .project-gallery-shell { border-color:#2b3a51; background:linear-gradient(145deg,#111c2e 8%,#0f192a 100%); box-shadow:0 28px 70px -48px rgba(0,0,0,.72); }
+html[data-theme='dark'] .project-gallery-count { color:#a9beff; }
+html[data-theme='dark'] .project-gallery-count i { background:#52627a; }
+html[data-theme='dark'] .project-gallery-thumb { border-color:transparent; background:#1b2b48; }
+html[data-theme='dark'] .project-gallery-thumb.active { border-color:#5f83ff; }
+html[data-theme='dark'] .portfolio-image-arrow { background:#111c2e; color:#a9beff; }
+html[data-theme='dark'] .admin-panel-glass,
+html[data-theme='dark'] .admin-stat-glass { border-color:rgba(148,163,184,.2); background:rgba(17,28,46,.82); box-shadow:0 16px 45px -32px rgba(0,0,0,.7),inset 0 1px rgba(255,255,255,.05); }
+html[data-theme='dark'] .admin-stat-glass:hover { border-color:rgba(147,174,255,.55); box-shadow:0 24px 50px -30px rgba(3,65,252,.3),inset 0 1px rgba(255,255,255,.06); }
+html[data-theme='dark'] .admin-stat-icon,
+html[data-theme='dark'] .admin-auth-card-icon { border-color:#33445e; background:linear-gradient(145deg,#1b2b48,#111c2e); color:#a9beff; }
+html[data-theme='dark'] .admin-glass-action { border:1px solid #35445c; background:#1b2940; color:#e2e8f0; box-shadow:0 8px 20px rgba(0,0,0,.22); }
+html[data-theme='dark'] .admin-glass-action:hover { background:#263858; }
+html[data-theme='dark'] .admin-auth-card { border-color:rgba(148,163,184,.26); background:linear-gradient(145deg,rgba(17,28,46,.96),rgba(11,18,32,.94)); color:#e2e8f0; box-shadow:0 28px 90px rgba(0,0,0,.5),inset 0 1px rgba(255,255,255,.06); }
+html[data-theme='dark'] .admin-auth-card h2 { color:#f8fafc; }
+html[data-theme='dark'] .admin-auth-label { color:#cbd5e1; }
+html[data-theme='dark'] .admin-auth-input { border-color:#3b4e6c; background:#0b1526; color:#f8fafc; }
+html[data-theme='dark'] .admin-auth-input:focus { border-color:#7895ff; background:#0d192c; }
+html[data-theme='dark'] .admin-auth-password button { color:#cbd5e1; }
+html[data-theme='dark'] .admin-auth-password button:hover { background:#1b2b48; color:#c5d4ff; }
+html[data-theme='dark'] .admin-auth-error { border-color:#713847; background:#3b2029; color:#fecdd3; }
 
 /* Keep the customer sign-in card readable as a single surface in both themes. */
 html[data-theme='dark'] .auth-glass-card {
@@ -1402,3 +1463,74 @@ html[data-theme='dark'] .admin-service-card > div:last-child { border-color:#293
 html[data-theme='dark'] .admin-service-card h3 { color:#f3f6fc; }
 html[data-theme='dark'] .admin-service-card .text-slate-600 { color:#aab7ca; }
 @media (prefers-reduced-motion: reduce) { .client-portal-hero,.client-portal-orb,.client-portal-stats > article,.admin-service-card,.admin-service-cover img,.magnetic-dropzone { animation:none !important; transition:none !important; transform:none !important; } }
+
+/* Invoice and payment receipt printer used after checkout and PayHero confirmation. */
+.checkout-printout { width:min(100%,35rem); margin-inline:auto; }
+.checkout-printer-machine { overflow:hidden; border:1px solid #273a5a; border-radius:1.4rem; background:radial-gradient(ellipse at 82% 0,rgba(45,91,205,.32),transparent 44%),linear-gradient(145deg,#101b34,#0b1220); padding:1.1rem; box-shadow:0 26px 60px -34px rgba(3,13,36,.72),inset 0 1px rgba(255,255,255,.08); }
+.checkout-printer-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.1rem .2rem .9rem; }
+.checkout-printer-home { display:inline-flex; align-items:center; gap:.4rem; border:1px solid rgba(255,255,255,.16); border-radius:.7rem; background:rgba(255,255,255,.08); padding:.48rem .7rem; color:#e5edff; font-size:.72rem; font-weight:750; }
+.checkout-printer-home:hover { background:rgba(255,255,255,.14); }
+.checkout-printer-screen { border:1px solid #263957; border-radius:.9rem; background:linear-gradient(145deg,#0a1427,#101d34); padding:1rem 1.1rem; color:#ecf3ff; box-shadow:inset 0 0 22px rgba(0,0,0,.25); }
+.checkout-printer-kicker { margin-bottom:.28rem; color:#91aefb; font-size:.57rem; font-weight:850; letter-spacing:.15em; }
+.checkout-printer-status-icon { display:grid; width:2.4rem; height:2.4rem; place-items:center; border:1px solid rgba(95,131,255,.28); border-radius:.8rem; background:#17294a; color:#a9beff; }
+.checkout-printer-screen-row { display:flex; justify-content:space-between; gap:.8rem; margin-top:.75rem; border-top:1px solid rgba(148,163,184,.13); padding-top:.65rem; font-size:.67rem; }
+.checkout-printer-screen-row span { color:#95a4bd; }
+.checkout-printer-screen-row strong { color:#e7eeff; text-align:right; }
+.checkout-printer-status { display:flex; align-items:center; gap:.45rem; margin-top:.85rem; color:#a9beff; font-size:.65rem; font-weight:700; }
+.checkout-printer-status::before { width:.42rem; height:.42rem; border-radius:50%; background:#60d6a5; box-shadow:0 0 0 .2rem rgba(96,214,165,.12); content:""; }
+.checkout-printer-slot { position:relative; z-index:2; height:.48rem; margin:.25rem 1.25rem 0; border:1px solid #070d18; border-radius:999px; background:linear-gradient(#020712,#253047 55%,#0a1221); box-shadow:0 4px 10px rgba(0,0,0,.3); }
+.checkout-print-paper { position:relative; z-index:1; width:88%; max-height:33rem; overflow:hidden; margin:-.12rem auto 0; border:1px solid #e1e6ef; border-radius:0 0 .25rem .25rem; background:repeating-linear-gradient(0deg,#fff 0,#fff 19px,#fbfcfe 20px); color:#142039; box-shadow:0 16px 26px -14px rgba(0,0,0,.5); transform-origin:top center; }
+.checkout-print-paper.is-hidden { opacity:0; transform:translateY(-102%); }
+.checkout-print-paper.is-printing { animation:checkout-paper-feed 1.9s cubic-bezier(.2,.7,.25,1) both; }
+.checkout-print-paper-content { padding:1.3rem 1.35rem 1.5rem; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.checkout-print-brand { display:flex; align-items:center; justify-content:space-between; gap:.8rem; border-bottom:1px dashed #ccd3df; padding-bottom:.85rem; }
+.checkout-print-brand > span { color:#304364; font-size:.57rem; font-weight:900; letter-spacing:.1em; text-align:right; }
+.checkout-print-number { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; margin-top:1rem; }
+.checkout-print-number > div,.checkout-print-billto { display:flex; min-width:0; flex-direction:column; gap:.2rem; }
+.checkout-print-number small,.checkout-print-billto small { color:#758198; font-size:.5rem; font-weight:800; letter-spacing:.11em; }
+.checkout-print-number strong { overflow-wrap:anywhere; color:#152442; font-size:.65rem; }
+.checkout-print-billto { margin-top:1rem; }
+.checkout-print-billto strong { color:#142039; font-size:.7rem; }
+.checkout-print-billto span { overflow-wrap:anywhere; color:#68758a; font-size:.59rem; }
+.checkout-print-lines { margin-top:1rem; border-top:1px solid #dce2eb; }
+.checkout-print-line { display:grid; grid-template-columns:minmax(0,1fr) 2rem minmax(5rem,auto); gap:.4rem; border-bottom:1px dashed #e0e5ed; padding:.45rem 0; color:#34435b; font-size:.56rem; }
+.checkout-print-line > span:last-child { text-align:right; }
+.checkout-print-line-detail { display:block; margin-top:.12rem; color:#718097; font-size:.48rem; font-weight:500; line-height:1.35; }
+html[data-theme='dark'] .invoice-payment-page { background:radial-gradient(ellipse at top,rgba(3,65,252,.18),transparent 52%),#0b1220; }
+html[data-theme='dark'] .invoice-payment-card { border-color:#34445e; background:rgba(16,27,45,.97); color:#e2e8f0; box-shadow:0 24px 90px rgba(0,0,0,.42); }
+html[data-theme='dark'] .invoice-payment-card > div:last-child { color:#e2e8f0; }
+html[data-theme='dark'] .invoice-payment-title,
+html[data-theme='dark'] .invoice-payment-label { color:#f1f5f9; }
+html[data-theme='dark'] .invoice-payment-summary { border-color:#34445e; background:#0b1526; }
+html[data-theme='dark'] .invoice-payment-summary .text-slate-500 { color:#a8b6ca; }
+html[data-theme='dark'] .invoice-payment-summary .border-slate-200 { border-color:#34445e; }
+html[data-theme='dark'] .invoice-payment-amount { color:#9bb5ff; }
+html[data-theme='dark'] .invoice-payment-input { border-color:#3b4e6c; background:#0b1526; color:#f8fafc; }
+html[data-theme='dark'] .invoice-payment-input::placeholder { color:#94a3b8; }
+html[data-theme='dark'] .invoice-payment-muted { color:#a8b6ca; }
+html[data-theme='dark'] .invoice-payment-card .bg-brand-50 { border-color:#29416e; background:#132344; color:#dbeafe; }
+.checkout-print-line.header { color:#758198; font-size:.5rem; font-weight:900; text-transform:uppercase; }
+.checkout-print-total { display:flex; align-items:center; justify-content:space-between; gap:.8rem; margin-top:.85rem; border-top:1px solid #cbd4e2; padding-top:.75rem; color:#34435b; font-size:.65rem; }
+.checkout-print-total strong { color:#0a37c7; font-size:.86rem; }
+.checkout-print-payment { display:flex; justify-content:space-between; gap:.75rem; margin-top:.55rem; color:#68758a; font-size:.55rem; }
+.checkout-print-payment strong { overflow-wrap:anywhere; color:#33425c; text-align:right; }
+.checkout-print-thanks { margin-top:1rem; border-top:1px dashed #ccd3df; padding-top:.75rem; color:#34435b; font-size:.6rem; text-align:center; }
+.checkout-print-thanks small { display:block; margin-top:.35rem; color:#8994a5; font-size:.47rem; letter-spacing:.08em; }
+.checkout-print-actions { display:flex; justify-content:center; margin-top:1rem; }
+.checkout-print-actions .btn-outline { gap:.5rem; }
+.checkout-invoice-next { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:1rem auto 0; max-width:35rem; border:1px solid #cdeee0; border-radius:1rem; background:#effbf5; padding:.85rem 1rem; color:#126443; font-size:.75rem; }
+.checkout-invoice-next > div { display:flex; align-items:flex-start; gap:.55rem; }
+.checkout-invoice-next svg { flex:0 0 auto; }
+@keyframes checkout-paper-feed { 0% { opacity:.3; transform:translateY(-95%); } 18% { opacity:1; } 75% { transform:translateY(-2%); } 82% { transform:translateY(-3%); } 100% { opacity:1; transform:translateY(0); } }
+html[data-theme='dark'] .checkout-invoice-next { border-color:#215742; background:#10352f; color:#a7f3d0; }
+@media (prefers-reduced-motion:reduce) { .checkout-print-paper.is-printing { animation:none; } }
+@media print {
+  body * { visibility:hidden !important; }
+  .checkout-printer-machine { position:static !important; overflow:visible !important; width:100% !important; border:0 !important; background:transparent !important; padding:0 !important; box-shadow:none !important; }
+  .checkout-printer-header,.checkout-printer-screen,.checkout-printer-slot,.checkout-print-actions,.checkout-invoice-next { display:none !important; }
+  .checkout-printout,.checkout-printer-machine,.checkout-print-paper,.checkout-print-paper * { visibility:visible !important; }
+  .checkout-printout { position:fixed !important; inset:0 !important; width:100% !important; max-width:none !important; margin:0 !important; }
+  .checkout-print-paper { position:absolute !important; inset:0 auto auto 0 !important; width:100% !important; max-height:none !important; overflow:visible !important; margin:0 !important; border:0 !important; border-radius:0 !important; background:#fff !important; box-shadow:none !important; opacity:1 !important; transform:none !important; animation:none !important; }
+  .checkout-print-paper-content { max-width:46rem; margin:0 auto; padding:1rem 0; }
+  @page { margin:14mm; size:auto; }
+}

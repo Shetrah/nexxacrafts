@@ -34,7 +34,7 @@ function fileIcon(file: File) {
   return FileText;
 }
 
-export function MagneticDropZone({ accept = 'image/*,.pdf,.zip', className, maxSize = 20 * 1024 * 1024, multiple = false, disabled = false, busy = false, onFilesChange }: MagneticDropZoneProps) {
+export function MagneticDropZone({ accept = 'image/*,.pdf,.zip', className, maxSize = 100 * 1024 * 1024, multiple = false, disabled = false, busy = false, onFilesChange }: MagneticDropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
   const [files, setFiles] = useState<File[]>([]);

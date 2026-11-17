@@ -8,11 +8,20 @@ Orders containing an unpriced line are saved without an invoice. Staff must set 
 
 1. Apply migration `20261117000500_payhero_invoice_payments.sql`.
 2. Rotate/revoke any PayHero credentials previously pasted into chat or screenshots. Create a fresh API key and keep its username/password private.
-3. Set Edge Function secrets (replace placeholders with the fresh rotated credentials and a sender on a verified Resend domain):
+3. Set Edge Function secrets in the same Supabase project. PayHero supports either the generated API username/password pair or the generated Basic Auth token; this function now accepts either. Prefer the token exactly as shown in PayHero (including its `Basic ` prefix) if the pair continues to return 401. Do not set the token as the username or password:
 
    ```sh
-   supabase secrets set PAYHERO_API_USERNAME='...' PAYHERO_API_PASSWORD='...' PAYHERO_CHANNEL_ID='6751' PUBLIC_SITE_URL='https://nexxacrafts.co.ke' RESEND_API_KEY='...' RESEND_FROM_EMAIL='NexxaCraft <billing@your-verified-domain.example>' PAYMENT_ADMIN_EMAIL='nexxacrafts@gmail.com'
+   # Option A: API username and password
+   supabase secrets set PAYHERO_API_USERNAME='...' PAYHERO_API_PASSWORD='...' PAYHERO_CHANNEL_ID='6751' --project-ref mjaobluyatooabghlzdo
+
+   # Option B: exact Basic Auth token from PayHero API Keys (use this OR option A)
+   supabase secrets set PAYHERO_BASIC_AUTH_TOKEN='Basic ...' PAYHERO_CHANNEL_ID='6751' --project-ref mjaobluyatooabghlzdo
+
+   # Other server-side email/site settings
+   supabase secrets set PUBLIC_SITE_URL='https://nexxacrafts.co.ke' RESEND_API_KEY='...' RESEND_FROM_EMAIL='NexxaCraft <billing@your-verified-domain.example>' PAYMENT_ADMIN_EMAIL='nexxacrafts@gmail.com' --project-ref mjaobluyatooabghlzdo
    ```
+
+   Confirm that `6751` is listed in PayHero under **Payment Channels → My Payment Channels** for the same account as the API key. It is a channel ID, not the account ID.
 
    `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected into hosted Edge Functions by Supabase. Do not add any of these credentials to `.env`, the Vite app, or Git.
 

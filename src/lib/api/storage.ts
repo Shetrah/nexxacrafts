@@ -3,7 +3,7 @@
  *
  * Storage RLS: a user may upload only under their own folder (`<user-id>/…`) and read their own
  * folder; staff (all roles except finance) can read every folder; only admin/admin may
- * update or delete other users' files. The bucket rejects files over 20 MB and file types outside
+ * update or delete other users' files. The bucket rejects files over 100 MB and file types outside
  * its allow-list (PNG, JPEG, WEBP, SVG, PDF, PostScript/AI, DXF, ZIP, DOCX, octet-stream).
  */
 import { getClient } from './client';
@@ -12,7 +12,7 @@ import { toApiError } from './errors';
 export const CUSTOMER_FILES_BUCKET = 'customer-files';
 
 /** Per-file upload limit (matches the bucket's `file_size_limit`). */
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 /** Prefix of the file references recorded in browser demo mode (no file is uploaded). */
 export const DEMO_FILE_PREFIX = 'DEMO FILE — ';
@@ -62,7 +62,7 @@ export async function uploadUserFile(userId: string, file: File, folder = 'draft
   const client = getClient();
   if (!userId) throw new Error('Please sign in before uploading files.');
   if (!/^[A-Za-z0-9_-]+$/.test(folder)) throw new Error('Choose a valid upload folder.');
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`${file.name} exceeds the 20 MB per-file limit.`);
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`${file.name} exceeds the 100 MB per-file limit.`);
 
   const path = `${userId}/${folder}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const { error } = await client.storage.from(CUSTOMER_FILES_BUCKET).upload(path, file, { upsert: false });

@@ -6,6 +6,8 @@ export interface ServiceField {
   type: FieldType;
   required?: boolean;
   options?: string[];
+  /** Per-unit price adjustment for each select option, in KES. */
+  optionPrices?: Record<string, number>;
   min?: number;
   step?: number;
   help?: string;

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { ServiceField } from './catalog';
 export interface PricingRate { service_slug: string; unit_rate: number; setup_fee: number; unit_label: string; active: boolean; }
 const KEY = 'nexxacrafts-pricing-rates-v1';
 export function getLocalRates(): PricingRate[] {
@@ -32,18 +33,28 @@ function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function calculateEstimate(slug: string, config: Record<string, string | number | boolean>, rates: PricingRate[]): number | null {
+export function calculateEstimate(slug: string, config: Record<string, string | number | boolean>, rates: PricingRate[], fields: ServiceField[] = []): number | null {
   const rate = rates.find(item => item.service_slug === slug && item.active && item.unit_rate > 0);
-  if (!rate) return null;
-  const qty = Number(config.quantity);
+  const qty = Number(config.quantity ?? 1);
   if (!Number.isFinite(qty) || qty <= 0) return null;
+  let optionAddOn = 0;
+  // Select option prices are service-field add-ons; the database RPC independently
+  // recalculates these from the saved service definition before accepting an order.
+  for (const field of fields) {
+    if (field.type !== 'select') continue;
+    const selected = config[field.name];
+    if (typeof selected !== 'string') continue;
+    const price = Number(field.optionPrices?.[selected] ?? 0);
+    if (Number.isFinite(price) && price > 0) optionAddOn += price;
+  }
+  if (!rate) return optionAddOn > 0 ? roundCurrency(optionAddOn * qty) : null;
   if (slug === 'banner-printing') {
     const width = Number(config.width);
     const height = Number(config.height);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
     const dimensionsAreCentimetres = config.dimension_unit === 'cm' || /cm|centimet/i.test(String(config.width_unit ?? '')) || /cm|centimet/i.test(String(rate.unit_label));
     const area = dimensionsAreCentimetres && isSquareMetreLabel(rate.unit_label) ? squareMetresFromCentimetres(width, height) : width * height;
-    return roundCurrency(area * qty * rate.unit_rate + rate.setup_fee);
+    return roundCurrency(area * qty * rate.unit_rate + rate.setup_fee + optionAddOn * qty);
   }
   if (slug === 'sticker-printing') {
     const width = Number(config.width);
@@ -51,7 +62,7 @@ export function calculateEstimate(slug: string, config: Record<string, string | 
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
     const legacyHundredSquareCmRate = /100\s*cm|centimet/i.test(rate.unit_label) && !isSquareMetreLabel(rate.unit_label);
     const area = legacyHundredSquareCmRate ? (width * height) / 100 : squareMetresFromCentimetres(width, height);
-    return roundCurrency(area * qty * rate.unit_rate + rate.setup_fee);
+    return roundCurrency(area * qty * rate.unit_rate + rate.setup_fee + optionAddOn * qty);
   }
-  return roundCurrency(qty * rate.unit_rate + rate.setup_fee);
+  return roundCurrency(qty * rate.unit_rate + rate.setup_fee + optionAddOn * qty);
 }
