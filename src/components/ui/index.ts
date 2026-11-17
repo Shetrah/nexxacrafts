@@ -22,6 +22,8 @@ export type {
 } from './Button';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
+export { DynamicButton, CopyDynamicButton } from './DynamicButton';
+export type { DynamicButtonProps } from './DynamicButton';
 export { Kbd } from './Kbd';
 export type { KbdProps } from './Kbd';
 

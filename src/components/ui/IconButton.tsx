@@ -79,10 +79,10 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       title={title ?? label}
       aria-describedby={joinIds(ariaDescribedBy, (count !== null || showDot) && description ? badgeId : undefined)}
       className={cn(
-        'relative inline-flex shrink-0 select-none items-center justify-center transition-[background-color,border-color,color] duration-150 ease-out motion-reduce:transition-none',
+        'relative inline-flex shrink-0 select-none items-center justify-center transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-out motion-reduce:transition-none',
         SIZES[size],
         styles.base,
-        disabled ? 'cursor-not-allowed opacity-50' : cn('cursor-pointer', styles.interactive),
+        disabled ? 'cursor-not-allowed opacity-50' : cn('cursor-pointer hover:-translate-y-px hover:shadow-sm active:translate-y-0 active:scale-[0.96] motion-reduce:transform-none', styles.interactive),
         className,
       )}
     >
