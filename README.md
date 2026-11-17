@@ -52,7 +52,7 @@ Production, inventory, finance and projects have useful first-pass operational s
 
 ## Payments: important readiness note
 
-Checkout currently records the customer's preferred payment method (M-Pesa, bank transfer or card) plus collection/local-delivery/courier details, and creates a pending payment record after an authenticated order is submitted. It does **not** collect money yet. Live M-Pesa STK Push, card checkout, bank reconciliation, payment callbacks/webhooks, signature verification, refunds and reconciliation must be implemented through server-side Supabase Edge Functions or a trusted backend. Provider secrets must never be exposed in frontend `VITE_*` variables.
+Checkout records the customer's preferred payment method and delivery details. For a fully priced order it now creates and emails an invoice with an M-Pesa payment link. The PayHero STK Push and callback run through the `payhero-payments` Supabase Edge Function; payment confirmation, invoice balance, receipt email, and admin payment alerts are saved server-side. Orders that need a staff quotation remain unpaid until the invoice is issued. Provider secrets must never be exposed in frontend `VITE_*` variables.
 
 Before production launch, choose the specific payment providers and obtain their merchant credentials, callback URLs and test accounts. Verify each provider's webhook signature server-side before changing a payment to confirmed.
 
@@ -65,7 +65,7 @@ Rates are deliberately inactive/empty by default. For the three instant-configur
 - Replace placeholder/generic stock imagery with nexxacrafts-owned portfolio and product photography.
 - The primary site wordmark and new SVG brand mark use the approved spelling “nexxacrafts”. The original supplied PNG logo is preserved in `public/` but is no longer used in the primary navigation.
 - Supply real price lists, minimum charges, quantity breaks, rush rules and supported machine/material constraints.
-- Complete payment-provider Edge Functions and webhook verification.
+- Configure and deploy PayHero payment secrets and the `payhero-payments` Edge Function before accepting live M-Pesa payments.
 - Finish production, proof approval, inventory, expense, invoice, project and delivery CRUD screens.
 - Add email/SMS notification providers and templates.
 - Configure domain, HTTPS, backups, database monitoring and storage retention.

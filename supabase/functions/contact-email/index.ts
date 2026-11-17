@@ -231,8 +231,10 @@ Deno.serve(async (request) => {
     return json({ error: 'Invalid request body' }, 400, origin);
   }
 
-  const kind = payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';
-  if (payload.kind === 'invoice') {
+  const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
+    ? 'invoice'
+    : payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';
+  if (kind === 'invoice') {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -252,17 +254,36 @@ Deno.serve(async (request) => {
       const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?${profileQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
       const profiles = await profileResponse.json();
       const role = Array.isArray(profiles) ? profiles[0]?.role : null;
-      if (!['admin', 'finance'].includes(role)) return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
+    if (!['admin', 'finance'].includes(role) && payload.kind !== 'checkout_invoice') return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
 
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
-      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at', id: `eq.${invoiceId}` });
+      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at', id: `eq.${invoiceId}` });
       const invoiceResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
       if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}).`);
       const invoices = await invoiceResponse.json();
       const invoice = Array.isArray(invoices) ? invoices[0] : null;
       if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
       if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
+      if (invoice.order_id && payload.kind === 'checkout_invoice') {
+        const ownerQuery = new URLSearchParams({ select: 'customer_id', id: `eq.${invoice.order_id}`, limit: '1' });
+        const ownerResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${ownerQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        const ownerRows = ownerResponse.ok ? await ownerResponse.json() : [];
+        if (!Array.isArray(ownerRows) || ownerRows[0]?.customer_id !== authUser.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
+      }
+      if (payload.kind === 'checkout_invoice' && invoice.sent_at) return json({ ok: true, invoiceEmailSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
+      if (payload.kind === 'checkout_invoice' && invoice.order_id) {
+        const orderQuery = new URLSearchParams({ select: 'customer_id,customer_email', id: `eq.${invoice.order_id}`, limit: '1' });
+        const orderResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${orderQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        const orderRows = orderResponse.ok ? await orderResponse.json() : [];
+        const order = Array.isArray(orderRows) ? orderRows[0] : null;
+        const authHeader = request.headers.get('authorization');
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+        const ownerResponse = authHeader && anonKey ? await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } }) : null;
+        const owner = ownerResponse?.ok ? await ownerResponse.json() : null;
+        if (!order || !owner || order.customer_id !== owner.id) return json({ error: 'The order owner could not be verified.' }, 403, origin);
+        if (asText(order.customer_email, 254).toLowerCase() !== asText(invoice.customer_email, 254).toLowerCase()) return json({ error: 'The invoice recipient does not match the saved order.' }, 403, origin);
+      }
       const recipient = asText(invoice.customer_email, 254);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return json({ error: 'The invoice needs a valid customer email address.' }, 400, origin);
       if (!resendKey || !fromEmail) return json({ error: 'Invoice email is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL in Supabase Edge Function secrets.' }, 503, origin);
@@ -286,8 +307,12 @@ Deno.serve(async (request) => {
         }).join('');
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
-      const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(Number(invoice.total) - Number(invoice.amount_paid || 0))}\n\nThank you for choosing NexxaCraft.`;
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(Number(invoice.total) - Number(invoice.amount_paid || 0))}</span></div></td></tr><tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="https://nexxacrafts.co.ke" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      const paymentUrl = invoice.order_id ? `${Deno.env.get('PUBLIC_SITE_URL') || 'https://nexxacrafts.co.ke'}/pay/${invoice.id}` : '';
+      const dueAmount = Number(invoice.total) - Number(invoice.amount_paid || 0);
+      const payText = paymentUrl ? `\nPay securely by M-Pesa: ${paymentUrl}` : '';
+      const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(dueAmount)}${payText}\n\nThank you for choosing NexxaCraft.`;
+      const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="https://nexxacrafts.co.ke" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
       const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
       if (!sent.ok) {
         const details = (await sent.text()).slice(0, 1000);
@@ -342,13 +367,57 @@ Deno.serve(async (request) => {
       const savedItems = await itemResponse.json();
       const validItems = Array.isArray(savedItems) ? savedItems : [];
       let emailSent = false;
+      let invoiceEmailSent = false;
+      let invoiceEmailError = '';
+      if (savedOrder.total !== null && Number(savedOrder.total) > 0) {
+        try {
+          const invoiceQuery = new URLSearchParams({ select: 'id,invoice_number', order_id: `eq.${savedOrder.id}`, limit: '1' });
+          const existingResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+          if (!existingResponse.ok) throw new Error(`Invoice lookup failed (${existingResponse.status}).`);
+          const existingRows = await existingResponse.json();
+          let invoice = Array.isArray(existingRows) ? existingRows[0] : null;
+          if (!invoice) {
+            const invoiceNumber = `INV-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${crypto.randomUUID().replace(/-/g,'').slice(0,5).toUpperCase()}`;
+            const insertResponse = await fetch(`${supabaseUrl}/rest/v1/invoices`, { method: 'POST', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation,resolution=ignore-duplicates' }, body: JSON.stringify({ order_id: savedOrder.id, invoice_number: invoiceNumber, customer_name: savedOrder.customer_name, customer_email: savedOrder.customer_email, subtotal: savedOrder.subtotal ?? savedOrder.total, tax: savedOrder.tax ?? 0, total: savedOrder.total, amount_paid: 0, status: 'issued', issued_at: new Date().toISOString() }) });
+            if (!insertResponse.ok) throw new Error(`Invoice creation failed (${insertResponse.status}): ${(await insertResponse.text()).slice(0,400)}`);
+            const inserted = await insertResponse.json(); invoice = Array.isArray(inserted) ? inserted[0] : null;
+            if (!invoice) {
+              const retryQuery = new URLSearchParams({ select: 'id,invoice_number', order_id: `eq.${savedOrder.id}`, limit: '1' });
+              const retryResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${retryQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+              const retryRows = retryResponse.ok ? await retryResponse.json() : [];
+              invoice = Array.isArray(retryRows) ? retryRows[0] : null;
+            }
+          }
+          if (!invoice?.id) throw new Error('The order invoice was not created.');
+          const paymentQuery = new URLSearchParams({ select: 'id', order_id: `eq.${savedOrder.id}`, status: 'eq.pending', limit: '1' });
+          const paymentResponse = await fetch(`${supabaseUrl}/rest/v1/payments?${paymentQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+          if (!paymentResponse.ok) throw new Error(`Payment lookup failed (${paymentResponse.status}).`);
+          const paymentRows = await paymentResponse.json(); const payment = Array.isArray(paymentRows) ? paymentRows[0] : null;
+          if (payment?.id) {
+            const linkResponse = await fetch(`${supabaseUrl}/rest/v1/payments?id=eq.${payment.id}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ invoice_id: invoice.id, amount: savedOrder.total, provider: 'payhero' }) });
+            if (!linkResponse.ok) throw new Error(`Invoice payment link failed (${linkResponse.status}).`);
+          }
+          const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
+          invoiceEmailSent = invoiceEmail.ok && (await invoiceEmail.json().catch(() => ({}))).invoiceEmailSent === true;
+          if (!invoiceEmailSent) {
+            const detail = await invoiceEmail.json().catch(() => ({}));
+            invoiceEmailError = asText(detail.error, 500) || `Invoice email request failed (${invoiceEmail.status}).`;
+            console.error('Auto invoice created but invoice email was not accepted', invoiceEmail.status, invoiceEmailError);
+          }
+        } catch (error) {
+          invoiceEmailError = error instanceof Error ? error.message : 'Could not automatically issue order invoice.';
+          console.error('Could not automatically issue order invoice', error);
+        }
+      } else {
+        invoiceEmailError = 'A final order total is not saved yet, so an invoice cannot be issued. An admin must confirm the price first.';
+      }
       try { emailSent = await sendCustomerOrderEmail(savedOrder, validItems); }
       catch (error) { console.error('Could not send customer order email', error); }
       let whatsappSent = false;
       try {
         whatsappSent = await sendOrderWhatsApp({ ...order, name: savedOrder.customer_name, email: savedOrder.customer_email, phone: savedOrder.customer_phone, reference: savedOrder.reference, items: validItems });
       } catch (error) { console.error('Could not send the order WhatsApp notification', error); }
-      return json({ ok: true, notificationSent: whatsappSent, customerEmailSent: emailSent }, 200, origin);
+      return json({ ok: true, notificationSent: whatsappSent, customerEmailSent: emailSent, invoiceEmailSent, invoiceEmailError }, 200, origin);
     } catch (error) {
       console.error('Could not send customer order confirmation', error);
       return json({ ok: true, notificationSent: false, customerEmailSent: false }, 200, origin);

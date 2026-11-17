@@ -221,6 +221,7 @@ export interface OrderItemRow {
 export interface PaymentRow {
   id: string;
   order_id: string;
+  invoice_id: string | null;
   method: PaymentMethod;
   /** `null` while the order still awaits a quotation. */
   amount: number | null;
@@ -231,6 +232,8 @@ export interface PaymentRow {
   transaction_reference: string | null;
   recorded_by: string | null;
   confirmed_at: string | null;
+  receipt_sent_at: string | null;
+  failure_reason: string | null;
   created_at: string;
 }
 

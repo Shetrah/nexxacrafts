@@ -19,6 +19,7 @@ const ServiceOrder = lazy(() => import('./pages/ServiceOrder'));
 const Quote = lazy(() => import('./pages/Quote'));
 const Cart = lazy(() => import('./pages/Cart'));
 const Checkout = lazy(() => import('./pages/Checkout'));
+const InvoicePayment = lazy(() => import('./pages/InvoicePayment'));
 const TrackOrder = lazy(() => import('./pages/TrackOrder'));
 const Account = lazy(() => import('./pages/Account'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
@@ -50,6 +51,7 @@ function App() {
                 <Route path="/quote" element={<Quote />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/checkout" element={<Checkout />} />
+                <Route path="/pay/:invoiceId" element={<InvoicePayment />} />
                 <Route path="/track" element={<TrackOrderRoute />} />
                 <Route path="/track/:reference" element={<TrackOrderRoute />} />
                 <Route path="/account/*" element={<Account />} />

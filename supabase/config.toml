@@ -2,3 +2,6 @@ project_id = "mjaobluyatooabghlzdo"
 
 [functions.contact-email]
 verify_jwt = false
+
+[functions.payhero-payments]
+verify_jwt = false
