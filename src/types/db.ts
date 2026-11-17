@@ -133,6 +133,7 @@ export interface ServiceRow {
   category: string;
   description: string;
   image_url: string | null;
+  allow_file_uploads: boolean;
   pricing_mode: PricingMode;
   /** jsonb, default `[]`. The UI uses the field definitions in `src/lib/catalog.ts`. */
   fields: Json;

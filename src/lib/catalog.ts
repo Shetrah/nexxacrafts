@@ -9,6 +9,10 @@ export interface ServiceField {
   min?: number;
   step?: number;
   help?: string;
+  /** File question options for the customer order form. */
+  multiple?: boolean;
+  accept?: string;
+  maxSizeMb?: number;
 }
 export interface ServiceDefinition {
   slug: string;
@@ -22,6 +26,8 @@ export interface ServiceDefinition {
   turnaround: string;
   icon: string;
   image: string;
+  /** Show the optional general artwork upload zone on this service's order form. */
+  allowFileUploads?: boolean;
   fields: ServiceField[];
 }
 
