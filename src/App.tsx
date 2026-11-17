@@ -23,6 +23,7 @@ const InvoicePayment = lazy(() => import('./pages/InvoicePayment'));
 const TrackOrder = lazy(() => import('./pages/TrackOrder'));
 const Account = lazy(() => import('./pages/Account'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
+const PortfolioProject = lazy(() => import('./pages/PortfolioProject'));
 const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -56,6 +57,7 @@ function App() {
                 <Route path="/track/:reference" element={<TrackOrderRoute />} />
                 <Route path="/account/*" element={<Account />} />
                 <Route path="/portfolio" element={<Portfolio />} />
+                <Route path="/portfolio/:projectSlug" element={<PortfolioProject />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="*" element={<NotFound />} />

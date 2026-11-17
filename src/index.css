@@ -140,6 +140,41 @@
   .portfolio-image-note { right:1rem; }
   .portfolio-image-arrow { position:absolute; z-index:1; right:1rem; bottom:1rem; display:grid; width:2.25rem; height:2.25rem; place-items:center; border-radius:50%; background:#fff; color:#0341fc; transition:transform 200ms ease; }
   .portfolio-project-card:hover .portfolio-image-arrow { transform:rotate(45deg); }
+  .project-gallery-shell { overflow:hidden; border:1px solid #dfe6f2; border-radius:1.6rem; background:linear-gradient(145deg,#fff 8%,#f5f8ff 100%); padding:clamp(1rem,3vw,2rem); box-shadow:0 28px 70px -48px rgba(16,35,75,.32); }
+  .project-gallery-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; padding:0 .25rem 1.25rem; }
+  .project-gallery-count { display:flex; align-items:center; gap:.6rem; color:#123bba; font-size:.85rem; font-weight:800; letter-spacing:.08em; }
+  .project-gallery-count i { width:2rem; height:1px; background:#c2cce0; }
+  .project-gallery-stage { position:relative; isolation:isolate; overflow:hidden; aspect-ratio:16/9; min-height:17rem; border:1px solid rgba(255,255,255,.15); border-radius:1.2rem; background:#081326; box-shadow:0 24px 50px -28px rgba(7,11,22,.65); }
+  .project-gallery-feature { position:absolute; inset:0; width:100%; height:100%; cursor:zoom-in; object-fit:cover; animation:nc-gallery-reveal 700ms cubic-bezier(.2,.7,.2,1) both; }
+  .project-gallery-shade { position:absolute; z-index:1; inset:0; pointer-events:none; background:linear-gradient(180deg,rgba(5,13,29,.56),transparent 27%,transparent 48%,rgba(5,13,29,.78)); }
+  .project-gallery-topline { position:absolute; z-index:2; top:1rem; right:1rem; left:1rem; display:flex; align-items:center; justify-content:space-between; color:white; font-size:.72rem; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+  .project-gallery-topline > span { border:1px solid rgba(255,255,255,.2); border-radius:999px; background:rgba(7,16,34,.5); padding:.55rem .8rem; backdrop-filter:blur(14px); }
+  .project-gallery-topline button,.project-gallery-arrow { display:grid; place-items:center; border:1px solid rgba(255,255,255,.34); background:rgba(8,19,38,.48); color:#fff; backdrop-filter:blur(14px); transition:transform 180ms ease,background 180ms ease,border-color 180ms ease; }
+  .project-gallery-topline button { width:2.55rem; height:2.55rem; border-radius:50%; }
+  .project-gallery-topline button:hover,.project-gallery-arrow:hover { transform:scale(1.08); border-color:#fff; background:#0341fc; }
+  .project-gallery-arrow { position:absolute; z-index:3; top:50%; width:2.8rem; height:2.8rem; border-radius:50%; transform:translateY(-50%); }
+  .project-gallery-arrow:hover { transform:translateY(-50%) scale(1.08); }
+  .project-gallery-prev { left:1rem; }.project-gallery-next { right:1rem; }
+  .project-gallery-caption { position:absolute; z-index:2; bottom:1.5rem; left:1.5rem; color:#fff; animation:nc-gallery-caption 500ms 100ms both; }
+  .project-gallery-caption-label { color:#a9beff; font-size:.64rem; font-weight:850; letter-spacing:.2em; }
+  .project-gallery-caption p { margin-top:.35rem; font-size:clamp(1.15rem,3vw,1.8rem); font-weight:800; letter-spacing:-.035em; text-shadow:0 2px 20px rgba(0,0,0,.35); }
+  .project-gallery-caption small { display:block; margin-top:.3rem; color:#d5deef; font-size:.75rem; }
+  .project-gallery-thumbnails { display:flex; gap:.75rem; overflow-x:auto; padding:1rem .1rem .2rem; scrollbar-width:thin; }
+  .project-gallery-thumb { position:relative; flex:0 0 clamp(7rem,18vw,11rem); overflow:hidden; aspect-ratio:16/10; border:2px solid transparent; border-radius:.8rem; background:#e9eef8; opacity:.72; transform:translateY(0); transition:opacity 180ms ease,transform 220ms ease,border-color 220ms ease,box-shadow 220ms ease; }
+  .project-gallery-thumb:hover { opacity:1; transform:translateY(-3px); }
+  .project-gallery-thumb.active { border-color:#0341fc; opacity:1; box-shadow:0 6px 22px rgba(3,65,252,.2); }
+  .project-gallery-thumb img { width:100%; height:100%; object-fit:cover; transition:transform 400ms ease; }
+  .project-gallery-thumb:hover img { transform:scale(1.07); }
+  .project-gallery-thumb span { position:absolute; right:.45rem; bottom:.4rem; border-radius:999px; background:rgba(7,11,22,.72); padding:.2rem .4rem; color:white; font-size:.6rem; font-weight:800; }
+  .project-lightbox { position:fixed; z-index:1000; inset:0; display:flex; align-items:center; justify-content:center; gap:clamp(.5rem,3vw,2.5rem); background:rgba(3,8,19,.94); padding:4rem clamp(.75rem,4vw,3rem) 2rem; backdrop-filter:blur(16px); animation:nc-lightbox-in 220ms ease both; }
+  .project-lightbox-close { position:absolute; top:1rem; right:1rem; z-index:2; display:grid; width:2.8rem; height:2.8rem; place-items:center; border:1px solid rgba(255,255,255,.25); border-radius:50%; background:rgba(255,255,255,.1); color:#fff; transition:transform 180ms ease,background 180ms ease; }
+  .project-lightbox-close:hover { transform:rotate(90deg); background:#0341fc; }
+  .project-lightbox-figure { width:min(78vw,1100px); max-height:100%; animation:nc-gallery-reveal 350ms ease both; }
+  .project-lightbox-figure img { display:block; max-height:calc(100vh - 8rem); width:100%; border-radius:1rem; object-fit:contain; box-shadow:0 30px 100px rgba(0,0,0,.45); }
+  .project-lightbox-figure figcaption { display:flex; justify-content:space-between; gap:1rem; padding:.9rem .15rem; color:#e7edfa; font-size:.85rem; font-weight:700; }
+  .project-lightbox-figure figcaption span { color:#a9beff; }
+  .project-lightbox-arrow { display:grid; flex:0 0 3rem; width:3rem; height:3rem; place-items:center; border:1px solid rgba(255,255,255,.25); border-radius:50%; background:rgba(255,255,255,.1); color:#fff; transition:background 180ms ease,transform 180ms ease; }
+  .project-lightbox-arrow:hover { transform:scale(1.08); background:#0341fc; }
   .service-tag { border-radius:999px; background:#eef3ff; padding:.3rem .55rem; color:#0234d0; font-size:.67rem; font-weight:700; text-transform:capitalize; }
   .owner-profile-section { background:linear-gradient(180deg,#f8faff,#fff); }
   .owner-profile-card { display:flex; align-items:center; gap:1.25rem; border:1px solid #dce6ff; border-left:3px solid #ef4444; border-radius:1.1rem; background:#fff; padding:1.5rem; box-shadow:0 14px 38px -30px rgba(11,18,32,.3); }
@@ -148,8 +183,20 @@
 }
 
 @keyframes nc-route-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes nc-gallery-reveal { from { opacity:0; transform:scale(1.025); filter:blur(5px); } to { opacity:1; transform:scale(1); filter:blur(0); } }
+@keyframes nc-gallery-caption { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes nc-lightbox-in { from { opacity:0; } to { opacity:1; } }
 @media (prefers-reduced-motion: reduce) {
-  .scroll-reveal, .site-route-transition, .service-feature-card, .portfolio-project-card, .service-feature-image > img, .portfolio-project-image > img, .about-principle { animation:none !important; transition:none !important; transform:none !important; }
+  .scroll-reveal, .site-route-transition, .service-feature-card, .portfolio-project-card, .service-feature-image > img, .portfolio-project-image > img, .about-principle, .project-gallery-feature, .project-gallery-caption, .project-gallery-thumb, .project-gallery-thumb img, .project-lightbox, .project-lightbox-figure, .project-gallery-arrow, .project-gallery-topline button { animation:none !important; transition:none !important; transform:none !important; filter:none !important; }
+}
+@media (max-width: 640px) {
+  .project-gallery-stage { aspect-ratio:4/3; min-height:16rem; }
+  .project-gallery-caption { bottom:1rem; left:1rem; right:1rem; }
+  .project-gallery-prev { left:.55rem; }.project-gallery-next { right:.55rem; }
+  .project-gallery-arrow { width:2.35rem; height:2.35rem; }
+  .project-lightbox { gap:.35rem; padding:4rem .4rem 1rem; }
+  .project-lightbox-figure { width:calc(100vw - 5.3rem); }
+  .project-lightbox-arrow { flex-basis:2.2rem; width:2.2rem; height:2.2rem; }
 }
 
 /* -------------------------------------------------------------------------------------------------

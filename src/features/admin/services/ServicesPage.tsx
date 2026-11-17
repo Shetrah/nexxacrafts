@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Check, Edit3, Loader2, Plus, Save, X } from 'lucide-react';
+import { Check, Edit3, ImagePlus, Loader2, Plus, Save, X } from 'lucide-react';
 import { useAdmin } from '../AdminContext';
 import { useCatalog } from '@/context/CatalogContext';
 import { createServiceRecord, listServiceRecords, updateServiceRecord } from '@/lib/api/services';
 import type { ServiceRow } from '@/types/db';
+import { uploadSiteImage } from '@/lib/adminMedia';
 
-type ServiceForm = { slug: string; name: string; category: string; description: string; pricing_mode: 'instant' | 'quote'; fields: string; sort_order: string; is_active: boolean };
-const emptyForm = (): ServiceForm => ({ slug: '', name: '', category: '', description: '', pricing_mode: 'quote', fields: '[]', sort_order: '0', is_active: true });
+type ServiceForm = { slug: string; name: string; category: string; description: string; image_url: string; pricing_mode: 'instant' | 'quote'; fields: string; sort_order: string; is_active: boolean };
+const emptyForm = (): ServiceForm => ({ slug: '', name: '', category: '', description: '', image_url: '', pricing_mode: 'quote', fields: '[]', sort_order: '0', is_active: true });
 const inputClass = 'form-control';
 
 export default function ServicesPage() {
@@ -25,7 +26,7 @@ export default function ServicesPage() {
   useEffect(() => { void reload(); }, []);
   const setField = <K extends keyof ServiceForm>(key: K, value: ServiceForm[K]) => setForm((current) => ({ ...current, [key]: value }));
   const startEdit = (row: ServiceRow) => {
-    setEditing(row.slug); setForm({ slug: row.slug, name: row.name, category: row.category, description: row.description, pricing_mode: row.pricing_mode, fields: JSON.stringify(row.fields ?? [], null, 2), sort_order: String(row.sort_order), is_active: row.is_active });
+    setEditing(row.slug); setForm({ slug: row.slug, name: row.name, category: row.category, description: row.description, image_url: row.image_url ?? catalog.find((service) => service.slug === row.slug)?.image ?? '', pricing_mode: row.pricing_mode, fields: JSON.stringify(row.fields ?? [], null, 2), sort_order: String(row.sort_order), is_active: row.is_active });
     setOpen(true); setError(''); setNotice('');
   };
   const startNew = () => { setEditing(null); setForm(emptyForm()); setOpen(true); setError(''); setNotice(''); };
@@ -36,7 +37,7 @@ export default function ServicesPage() {
     try {
       const parsedFields: unknown = JSON.parse(form.fields);
       if (!Array.isArray(parsedFields)) throw new Error('Service fields must be a JSON array.');
-      const common = { name: form.name, category: form.category, description: form.description, pricing_mode: form.pricing_mode, fields: parsedFields as ServiceRow['fields'], is_active: form.is_active, sort_order: Number(form.sort_order) || 0 };
+      const common = { name: form.name, category: form.category, description: form.description, image_url: form.image_url.trim() || null, pricing_mode: form.pricing_mode, fields: parsedFields as ServiceRow['fields'], is_active: form.is_active, sort_order: Number(form.sort_order) || 0 };
       if (editing) await updateServiceRecord(editing, common);
       else await createServiceRecord({ ...common, slug: form.slug });
       await reload(); window.dispatchEvent(new Event('nexxacraft:catalog-updated')); close(); setNotice(editing ? 'Service updated.' : 'Service added to the catalogue.');
@@ -66,7 +67,8 @@ export default function ServicesPage() {
       <label className="text-sm font-semibold">Pricing approach<select value={form.pricing_mode} onChange={(e)=>setField('pricing_mode',e.target.value as ServiceForm['pricing_mode'])} className={`${inputClass} mt-1`}><option value="quote">Quotation required</option><option value="instant">Instant price from pricing rules</option></select></label>
       <label className="text-sm font-semibold">Display order<input type="number" value={form.sort_order} onChange={(e)=>setField('sort_order',e.target.value)} className={`${inputClass} mt-1`} /></label>
       <label className="sm:col-span-2 text-sm font-semibold">Description<textarea required rows={3} value={form.description} onChange={(e)=>setField('description',e.target.value)} className={`${inputClass} mt-1`} /></label>
-      <label className="sm:col-span-2 text-sm font-semibold">Order form fields (JSON)<textarea rows={8} value={form.fields} onChange={(e)=>setField('fields',e.target.value)} className={`${inputClass} mt-1 font-mono text-xs`} /><span className="mt-1 block text-xs font-normal text-slate-500">Example: [{`{"name":"quantity","label":"Quantity","type":"number","required":true}`}]</span></label>
+      <div className="sm:col-span-2 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"><label className="text-sm font-semibold">Service image URL<input type="url" value={form.image_url} onChange={(e)=>setField('image_url',e.target.value)} placeholder="https://…" className={`${inputClass} mt-1`} /></label><label className="btn-outline cursor-pointer justify-center"><ImagePlus size={16}/> Upload image<input type="file" accept="image/*" className="sr-only" onChange={async(e)=>{const input=e.currentTarget;const file=input.files?.[0];if(!file)return;setSaving(true);setError('');try{setField('image_url',await uploadSiteImage('services',(editing??form.slug)||'new-service',file));}catch(err){setError(err instanceof Error?err.message:'Image upload failed.');}finally{setSaving(false);input.value='';}}}/></label>{form.image_url&&<img src={form.image_url} alt="Service preview" className="sm:col-span-2 h-40 w-full rounded-xl border border-line object-cover" />}</div>
+      <label className="sm:col-span-2 text-sm font-semibold">Order form fields (JSON)<textarea rows={8} value={form.fields} onChange={(e)=>setField('fields',e.target.value)} className={`${inputClass} mt-1 font-mono text-xs`} /><span className="mt-1 block text-xs font-normal text-slate-500">Example: [{`{"name":"quantity","label":"Quantity","type":"number","required":true}`} ]</span></label>
       <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.is_active} onChange={(e)=>setField('is_active',e.target.checked)} /> Available on the website</label>
       <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className="btn-outline" onClick={close}>Cancel</button><button type="submit" disabled={saving} className="btn-primary">{saving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {editing ? 'Save changes' : 'Add service'}</button></div>
     </form>}

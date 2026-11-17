@@ -16,6 +16,8 @@ export interface PortfolioItem {
   /** Catalogue slugs of the services involved (src/lib/catalog.ts). */
   services: string[];
   imageKey: string;
+  imageUrl?: string;
+  galleryImages?: string[];
   /** Optional secondary image key (e.g. a mobile screenshot). */
   secondaryImageKey?: string;
   link?: { label: string; href: string };

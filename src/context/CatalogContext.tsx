@@ -17,7 +17,7 @@ function fromRecord(row: Awaited<ReturnType<typeof listServiceRecords>>[number],
     tagline: base?.tagline ?? `Made to fit your ${row.category.toLowerCase()} project.`,
     turnaround: base?.turnaround ?? 'Confirmed after review',
     icon: base?.icon ?? 'Sparkles',
-    image: base?.image ?? 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=85',
+    image: row.image_url ?? base?.image ?? 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=85',
   };
 }
 

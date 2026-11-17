@@ -22,6 +22,7 @@ const OrdersPage = lazy(() => import('./orders/OrdersPage'));
 const QuotesPage = lazy(() => import('./quotes/QuotesPage'));
 const CustomersPage = lazy(() => import('./customers/CustomersPage'));
 const ServicesPage = lazy(() => import('./services/ServicesPage'));
+const PortfolioMediaPage = lazy(() => import('./portfolio/PortfolioMediaPage'));
 const PricingPage = lazy(() => import('./pricing/PricingPage'));
 const ProductionPage = lazy(() => import('./production/ProductionPage'));
 const InventoryPage = lazy(() => import('./inventory/InventoryPage'));
@@ -48,6 +49,7 @@ const MODULE_ROUTES: Array<{ path: string; module: AdminModuleId; Component: Laz
   { path: 'quotes', module: 'quotes', Component: QuotesPage },
   { path: 'customers', module: 'customers', Component: CustomersPage },
   { path: 'services', module: 'services', Component: ServicesPage },
+  { path: 'portfolio', module: 'portfolio', Component: PortfolioMediaPage },
   { path: 'pricing', module: 'pricing', Component: PricingPage },
   { path: 'production', module: 'production', Component: ProductionPage },
   { path: 'inventory', module: 'inventory', Component: InventoryPage },

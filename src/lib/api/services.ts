@@ -1,12 +1,12 @@
 /**
  * Service catalogue rows (`public.services`). The UI's field definitions, images and copy come from
- * `src/lib/catalog.ts`; this table mirrors names, categories, pricing modes and activity.
+ * `src/lib/catalog.ts`; the table stores the editable public copy and image.
  */
 import type { Json, ServiceRow } from '@/types/db';
 import { columnsOf, expectRow, expectRows, getClient } from './client';
 
 const SERVICE_COLUMNS = columnsOf<ServiceRow>()(
-  'slug, name, category, description, pricing_mode, fields, is_active, sort_order, created_at, updated_at',
+  'slug, name, category, description, image_url, pricing_mode, fields, is_active, sort_order, created_at, updated_at',
 );
 
 /**
@@ -26,8 +26,8 @@ export async function listServiceRecords(): Promise<ServiceRow[]> {
 }
 
 export type NewServiceRecord = Pick<ServiceRow, 'slug' | 'name' | 'category' | 'description' | 'pricing_mode' | 'fields'> &
-  Partial<Pick<ServiceRow, 'is_active' | 'sort_order'>>;
-export type ServiceRecordPatch = Partial<Pick<ServiceRow, 'name' | 'category' | 'description' | 'pricing_mode' | 'fields' | 'is_active' | 'sort_order'>>;
+  Partial<Pick<ServiceRow, 'image_url' | 'is_active' | 'sort_order'>>;
+export type ServiceRecordPatch = Partial<Pick<ServiceRow, 'name' | 'category' | 'description' | 'image_url' | 'pricing_mode' | 'fields' | 'is_active' | 'sort_order'>>;
 
 /** Adds a service catalogue entry. Admin access is enforced by the services table RLS policy. */
 export async function createServiceRecord(input: NewServiceRecord): Promise<ServiceRow> {

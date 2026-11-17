@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Gauge,
   Headset,
+  Images,
   LayoutDashboard,
   Palette,
   Printer,
@@ -74,6 +75,7 @@ export type AdminModuleId =
   | 'quotes'
   | 'customers'
   | 'services'
+  | 'portfolio'
   | 'pricing'
   | 'production'
   | 'inventory'
@@ -122,6 +124,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   { id: 'quotes', label: 'Quotations', path: '/admin/quotes', icon: FileText, group: 'Commerce', roles: [ 'admin', 'sales', 'finance'], description: 'Review, price and progress customer quote requests.' },
   { id: 'customers', label: 'Customers', path: '/admin/customers', icon: Users, group: 'Commerce', roles: [ 'admin', 'sales', 'finance'], description: 'Customer accounts with their orders and quotations.' },
   { id: 'services', label: 'Products & services', path: '/admin/services', icon: Store, group: 'Commerce', roles: [ 'admin', 'sales'], description: 'The service catalogue, availability and pricing status.' },
+  { id: 'portfolio', label: 'Portfolio images', path: '/admin/portfolio', icon: Images, group: 'Commerce', roles: [ 'admin'], description: 'Project covers and website portfolio galleries.' },
   { id: 'pricing', label: 'Pricing rules', path: '/admin/pricing', icon: SlidersHorizontal, group: 'Commerce', roles: [ 'admin', 'sales'], description: 'Unit rates and setup fees used for instant estimates.' },
 
   // Operations

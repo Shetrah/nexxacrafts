@@ -132,11 +132,33 @@ export interface ServiceRow {
   name: string;
   category: string;
   description: string;
+  image_url: string | null;
   pricing_mode: PricingMode;
   /** jsonb, default `[]`. The UI uses the field definitions in `src/lib/catalog.ts`. */
   fields: Json;
   is_active: boolean;
   sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** `public.portfolio_projects` — public case studies managed by administrators. */
+export interface PortfolioProjectRow {
+  slug: string;
+  title: string;
+  category: string;
+  client: string | null;
+  summary: string;
+  description: string;
+  services: string[];
+  image_url: string;
+  gallery_images: string[];
+  link_url: string | null;
+  link_label: string | null;
+  illustrative: boolean;
+  featured: boolean;
+  sort_order: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
