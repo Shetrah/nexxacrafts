@@ -231,7 +231,38 @@ Deno.serve(async (request) => {
     return json({ error: 'Invalid request body' }, 400, origin);
   }
 
-  const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
+  if (payload.kind === 'invoice_revoked') {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL'), anonKey = Deno.env.get('SUPABASE_ANON_KEY'), serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const authorization = request.headers.get('authorization'), resendKey = Deno.env.get('RESEND_API_KEY'), fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
+    if (!supabaseUrl || !anonKey || !serviceKey || !authorization) return json({ error: 'Sign in is required to revoke an invoice.' }, 401, origin);
+    try {
+      const auth = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
+      if (!auth.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+      const user = await auth.json() as { id?: string };
+      const roleResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${user.id}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      const profiles = await roleResponse.json();
+      if (!Array.isArray(profiles) || !['admin','finance'].includes(profiles[0]?.role)) return json({ error: 'Only admins or finance staff can revoke invoices.' }, 403, origin);
+      if (!resendKey || !fromEmail) return json({ error: 'Email delivery is not configured.' }, 503, origin);
+      const id = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
+      const found = await fetch(`${supabaseUrl}/rest/v1/invoices?select=id,order_id,invoice_number,customer_name,customer_email,status&id=eq.${id}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      const rows = await found.json(); const invoice = Array.isArray(rows) ? rows[0] : null;
+      if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
+      if (invoice.status === 'paid') return json({ error: 'A paid invoice cannot be revoked.' }, 409, origin);
+      if (!invoice.customer_email) return json({ error: 'Invoice has no client email address.' }, 400, origin);
+      const html = `<html><body style="font-family:Arial;background:#edf2fa;padding:28px;color:#17243a"><main style="max-width:600px;margin:auto;background:#fff;border-radius:14px;padding:28px"><h1>Invoice revoked</h1><p>Hello ${escapeHtml(invoice.customer_name)}, invoice <b>${escapeHtml(invoice.invoice_number)}</b> has been revoked and is no longer payable. Contact our team if you need an updated invoice.</p></main></body></html>`;
+      const sent = await fetch('https://api.resend.com/emails', { method:'POST', headers:{Authorization:`Bearer ${resendKey}`,'Content-Type':'application/json'}, body:JSON.stringify({from:fromEmail,to:[invoice.customer_email],subject:`Invoice ${invoice.invoice_number} has been revoked · NexxaCraft`,html,text:`Invoice ${invoice.invoice_number} has been revoked and is no longer payable. Contact NexxaCraft if you need an updated invoice.`}) });
+      if (!sent.ok) return json({ error: `Could not email the client (${sent.status}); invoice remains active.` }, 502, origin);
+      if (invoice.order_id) {
+        const removed = await fetch(`${supabaseUrl}/rest/v1/rpc/delete_admin_order_for_invoice`, { method:'POST', headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,'Content-Type':'application/json'}, body:JSON.stringify({p_invoice_id:id}) });
+        if (!removed.ok) throw new Error(`Client was emailed, but the linked order could not be deleted (${removed.status}).`);
+        return json({ok:true,revoked:true,orderDeleted:true},200,origin);
+      }
+      const saved = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${id}`, {method:'PATCH',headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'void'})});
+      if (!saved.ok) throw new Error(`Client was emailed, but invoice status update failed (${saved.status}).`);
+      return json({ok:true,revoked:true,orderDeleted:false},200,origin);
+    } catch (error) { return json({error:error instanceof Error?error.message:'Could not revoke invoice.'},500,origin); }
+  }  const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
     ? 'invoice'
     : payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';
   if (kind === 'invoice') {
@@ -256,15 +287,6 @@ Deno.serve(async (request) => {
       } catch { return json({ error: 'Your staff session could not be verified.' }, 401, origin); }
       if (!authUser?.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
     }
-    try {
-      if (!internalCheckout) {
-        const profileQuery = new URLSearchParams({ select: 'role', id: `eq.${authUser!.id}` });
-        const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?${profileQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
-        const profiles = await profileResponse.json();
-        const role = Array.isArray(profiles) ? profiles[0]?.role : null;
-        if (!['admin', 'finance'].includes(role) && payload.kind !== 'checkout_invoice') return json({ error: 'Only an admin or finance user can send invoices.' }, 403, origin);
-      }
-
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
       const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at', id: `eq.${invoiceId}` });
@@ -347,12 +369,25 @@ Deno.serve(async (request) => {
         }).join('');
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
-      const paymentUrl = invoice.order_id ? `${Deno.env.get('PUBLIC_SITE_URL') || 'https://nexxacrafts.co.ke'}/pay/${invoice.id}` : '';
+      const siteUrl = (Deno.env.get('PUBLIC_SITE_URL') || 'https://nexxacrafts.co.ke').replace(/\/$/, '');
+      const paymentUrl = invoice.order_id ? `${siteUrl}/pay/${invoice.id}` : '';
+      let trackingUrl = '';
+      if (invoice.order_id) {
+        const orderReferenceQuery = new URLSearchParams({ select: 'reference', id: `eq.${invoice.order_id}`, limit: '1' });
+        const orderReferenceResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${orderReferenceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        if (orderReferenceResponse.ok) {
+          const orderRows = await orderReferenceResponse.json();
+          const orderReference = Array.isArray(orderRows) ? asText(orderRows[0]?.reference, 60) : '';
+          if (orderReference) trackingUrl = `${siteUrl}/track/${encodeURIComponent(orderReference)}`;
+        }
+      }
       const dueAmount = Number(invoice.total) - Number(invoice.amount_paid || 0);
       const payText = paymentUrl ? `\nPay securely by M-Pesa: ${paymentUrl}` : '';
-      const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(dueAmount)}${payText}\n\nThank you for choosing NexxaCraft.`;
+      const trackingText = trackingUrl ? `\nTrack your order status: ${trackingUrl}` : '';
+      const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(dueAmount)}${payText}${trackingText}\n\nThank you for choosing NexxaCraft.`;
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="https://nexxacrafts.co.ke" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      const trackingButton = trackingUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(trackingUrl)}" style="display:inline-block;border:1px solid #ccd7eb;border-radius:9px;padding:12px 20px;color:#183db7;text-decoration:none;font-size:14px;font-weight:700">Track your order status</a><p style="font-size:11px;color:#76839a">Use your order reference to check progress any time.</p></td></tr>` : '';
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
       const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
       if (!sent.ok) {
         const details = (await sent.text()).slice(0, 1000);

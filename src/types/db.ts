@@ -200,7 +200,8 @@ export interface QuoteRequestRow {
 export interface OrderRow {
   id: string;
   reference: string;
-  customer_id: string;
+  /** Null for orders entered by staff for a client without an account. */
+  customer_id: string | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;

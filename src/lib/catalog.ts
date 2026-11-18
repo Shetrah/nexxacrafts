@@ -8,6 +8,8 @@ export interface ServiceField {
   options?: string[];
   /** Per-unit price adjustment for each select option, in KES. */
   optionPrices?: Record<string, number>;
+  /** Only show this field when another field has the specified selected value. */
+  showWhen?: { field: string; equals: string };
   min?: number;
   step?: number;
   help?: string;
@@ -75,7 +77,11 @@ export const services: ServiceDefinition[] = [
       { name: 'quantity', label: 'Quantity', type: 'number', min: 1, step: 1, required: true },
       { name: 'sides', label: 'Print sides', type: 'select', options: ['Single-sided', 'Double-sided'] },
       { name: 'finishing', label: 'Finishing', type: 'select', options: ['No finishing', 'Hemming', 'Eyelets', 'Hemming + eyelets', 'Pole pockets', 'Advise me'] },
-      { name: 'artwork', label: 'Artwork status', type: 'select', options: ['Print-ready artwork available', 'Need design assistance'] },
+      { name: 'artwork', label: 'Artwork status', type: 'select', required: true, options: ['Print-ready artwork available', 'Need design assistance'] },
+      { name: 'design_service', label: 'Design assistance', type: 'select', required: true, options: ['Simple text and logo layout', 'Promotional banner design', 'Custom branded campaign design'], help: 'The design fee is added to the banner total.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_brief', label: 'Design brief', type: 'textarea', required: true, help: 'Describe the message, audience, preferred colours, wording, and any logos or references.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_references', label: 'Logo or design references', type: 'file', accept: 'image/*,.pdf,.zip,.ai,.svg', maxSizeMb: 100, multiple: true, help: 'Attach logos, inspiration images, or supporting material for the designer.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_formats', label: 'Preferred design or print size details', type: 'text', help: 'For example: include bleed, preferred layout/orientation, or final file format.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
     ],
   },
   {
@@ -92,6 +98,11 @@ export const services: ServiceDefinition[] = [
       { name: 'quantity', label: 'Quantity (pieces)', type: 'number', min: 1, step: 1, required: true },
       { name: 'finish', label: 'Finish', type: 'select', options: ['Gloss', 'Matte', 'Gloss laminate', 'Matte laminate', 'No preference'] },
       { name: 'cutting', label: 'Cutting', type: 'select', options: ['Standard cut', 'Custom contour cut', 'Not sure'] },
+      { name: 'artwork', label: 'Artwork status', type: 'select', required: true, options: ['Print-ready artwork available', 'Need design assistance'] },
+      { name: 'design_service', label: 'Design assistance', type: 'select', required: true, options: ['Simple text and logo layout', 'Product label design', 'Custom sticker or campaign design'], help: 'The design fee is added to the sticker total.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_brief', label: 'Design brief', type: 'textarea', required: true, help: 'Describe the wording, audience, style, colours, and any logos or references.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_references', label: 'Logo or design references', type: 'file', accept: 'image/*,.pdf,.zip,.ai,.svg', maxSizeMb: 100, multiple: true, help: 'Attach logos, inspiration images, or supporting material for the designer.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
+      { name: 'design_formats', label: 'Preferred design details', type: 'text', help: 'For example: label shape, orientation, bleed, or final file format.', showWhen: { field: 'artwork', equals: 'Need design assistance' } },
     ],
   },
   {
