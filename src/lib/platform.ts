@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { CartItem } from '../context/CartContext';
 
-export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; notificationSent?: boolean; customerEmailSent?: boolean; invoiceEmailSent?: boolean; invoiceEmailError?: string; }
+export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; notificationSent?: boolean; whatsappNotificationSent?: boolean; customerEmailSent?: boolean; invoiceEmailSent?: boolean; invoiceEmailError?: string; }
 const DEMO_KEYS = { quotes: 'nexxacrafts-demo-quotes', orders: 'nexxacrafts-demo-orders' };
 // Tracking works with a reference alone, so new references need a high-entropy random suffix.
 const makeReference = (prefix: string) => `${prefix}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
@@ -57,11 +57,17 @@ export async function submitOrder(input: { name: string; email: string; phone: s
     });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
+    let whatsappNotificationSent = false;
+    if (row?.id) {
+      const { data: whatsappResult, error: whatsappError } = await supabase.functions.invoke('whatsapp-messages', { body: { action: 'new-order', orderId: row.id } });
+      if (whatsappError) console.error('Order saved, but WhatsApp notification could not be confirmed.', whatsappError);
+      else whatsappNotificationSent = whatsappResult?.ok === true;
+    }
     const { data: notification, error: notificationError } = await supabase.functions.invoke('contact-email', {
       body: { kind: 'order', order: { ...input, reference: row.reference } },
     });
-    if (notificationError) console.error('Order saved, but WhatsApp notification could not be requested.', notificationError);
-    return { id: row.id, reference: row.reference, mode: 'live', notificationSent: notification?.notificationSent === true, customerEmailSent: notification?.customerEmailSent === true, invoiceEmailSent: notification?.invoiceEmailSent === true, invoiceEmailError: typeof notification?.invoiceEmailError === 'string' ? notification.invoiceEmailError : undefined };
+    if (notificationError) console.error('Order saved, but email notifications could not be requested.', notificationError);
+    return { id: row.id, reference: row.reference, mode: 'live', notificationSent: notification?.notificationSent === true, whatsappNotificationSent, customerEmailSent: notification?.customerEmailSent === true, invoiceEmailSent: notification?.invoiceEmailSent === true, invoiceEmailError: typeof notification?.invoiceEmailError === 'string' ? notification.invoiceEmailError : undefined };
   }
   const id = crypto.randomUUID();
   writeDemo(DEMO_KEYS.orders, { id, reference, ...input, status: 'awaiting_review', payment_status: 'unpaid', created_at: new Date().toISOString() });

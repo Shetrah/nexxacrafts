@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowRight, CalendarClock, ClipboardList, Download, FileText, Loader2, MapPin, PackageSearch, Plus, UserRound, Trash2 } from 'lucide-react';
+import { ArrowRight, CalendarClock, ClipboardList, Download, FileText, ImagePlus, Loader2, MapPin, PackageSearch, Plus, Send, UserRound, Trash2 } from 'lucide-react';
 import { Card, CardBody, CardHeader, Modal, SpecList, StatusBadge, useToast } from '@/components/ui';
 import { useAdmin } from '../AdminContext';
 import { getOrderBundle, listOrders, type OrderBundle } from '@/lib/api/orders';
@@ -108,6 +108,38 @@ function OrderDetail({ bundle, catalog }: { bundle: OrderBundle; catalog: readon
       </Card>)}
     </div>
   </div>;
+}
+
+function OrderArtworkShare({ order }: { order: OrderRow }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  async function share() {
+    if (!supabase || !file) return;
+    if (file.size > 100 * 1024 * 1024) { setError('Artwork files must be 100 MB or smaller.'); return; }
+    setBusy(true); setError(''); setNotice('');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${order.id}/${crypto.randomUUID()}-${safeName}`;
+    try {
+      const { error: uploadError } = await supabase.storage.from('order-artwork').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: signed, error: signedError } = await supabase.storage.from('order-artwork').createSignedUrl(path, 60 * 60);
+      if (signedError || !signed?.signedUrl) throw signedError || new Error('Could not create a temporary artwork link.');
+      const { data, error: invokeError } = await supabase.functions.invoke('whatsapp-messages', { body: { action: 'share-artwork', orderId: order.id, mediaUrl: signed.signedUrl, fileName: file.name, mimetype: file.type || undefined, caption: caption.trim() || undefined } });
+      if (invokeError) {
+        const response = (invokeError as typeof invokeError & { context?: Response }).context;
+        const details = response ? await response.clone().json().catch(() => null) : null;
+        throw new Error(details?.error || invokeError.message || 'WhatsApp could not send the artwork.');
+      }
+      if (data?.error) throw new Error(data.error);
+      setNotice(`Artwork shared with ${order.customer_name} on WhatsApp.`);
+      setFile(null); setCaption('');
+    } catch (shareError) { setError(shareError instanceof Error ? shareError.message : 'Could not share the artwork.'); }
+    finally { setBusy(false); }
+  }
+  return <Card><CardHeader title="Design approval" description="Upload the designed artwork and send it to the client’s WhatsApp number for review." /><CardBody><div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="text-sm font-medium">Artwork file<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf" className="form-control mt-1 h-auto py-2" onChange={event=>setFile(event.target.files?.[0]||null)}/><span className="mt-1 block text-xs font-normal text-slate-500">PNG, JPG, WebP, SVG, or PDF · up to 100 MB</span></label><label className="text-sm font-medium">Message to client<input className="form-control mt-1" value={caption} onChange={event=>setCaption(event.target.value)} placeholder={`Please review design for ${order.reference}`}/></label><button type="button" disabled={!file||busy} onClick={()=>void share()} className="btn-primary">{busy?<Loader2 className="animate-spin" size={16}/>:<Send size={16}/>} Share artwork</button></div>{file&&<p className="mt-2 flex items-center gap-2 text-xs text-slate-500"><ImagePlus size={14}/>{file.name} · {(file.size/1024/1024).toFixed(1)} MB</p>}{error&&<p role="alert" className="mt-3 rounded-lg bg-danger-50 p-3 text-sm text-danger-800">{error}</p>}{notice&&<p role="status" className="mt-3 rounded-lg bg-success-50 p-3 text-sm text-success-800">{notice}</p>}</CardBody></Card>;
 }
 
 export default function OrdersPage() {
@@ -239,9 +271,13 @@ export default function OrdersPage() {
       const row = Array.isArray(data) ? data[0] : data;
       if (!row?.order_id || !row?.invoice_id || !row?.reference) throw new Error('Order was created without its invoice details. Refresh the page and check the order list.');
       createdReference = String(row.reference);
+      let whatsappNotified = false;
+      const { data: whatsappData, error: whatsappError } = await supabase.functions.invoke('whatsapp-messages', { body: { action: 'new-order', orderId: row.order_id } });
+      if (whatsappError) console.error('Manual order saved, but WhatsApp notification failed.', whatsappError);
+      else whatsappNotified = whatsappData?.ok === true;
       try {
         await sendInvoiceEmail(String(row.invoice_id));
-        toast.success(`Order ${createdReference} was saved and its invoice emailed to ${manual.email}.`);
+        toast.success(`Order ${createdReference} was saved and its invoice emailed to ${manual.email}.${whatsappNotified ? ' WhatsApp notification sent to the team.' : ''}`);
       } catch (emailError) {
         toast.error(`Order ${createdReference} was saved, but its invoice email failed: ${emailError instanceof Error ? emailError.message : 'Please resend it from Finance > Invoices.'}`);
       }
@@ -310,7 +346,7 @@ export default function OrdersPage() {
     {(selectedId || detailLoading) && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchParams({}); }}>
       <section role="dialog" aria-modal="true" aria-label="Order details" className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl border border-line bg-slate-50 shadow-2xl sm:rounded-2xl">
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-white/95 px-5 py-4 backdrop-blur sm:px-7"><div><p className="text-[11px] font-bold uppercase tracking-[.15em] text-brand-700">Order details</p><h3 className="mt-1 text-lg font-bold">{selected?.order.reference ?? 'Loading…'}</h3></div><button type="button" onClick={() => setSearchParams({})} className="btn-outline btn-sm">Close</button></header>
-        <div className="p-4 sm:p-7">{detailLoading ? <div className="p-12 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 animate-spin text-brand-600" size={22} />Loading client order information…</div> : selected ? <><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><UserRound size={15} />Client</div><p className="mt-2 font-semibold">{selected.order.customer_name}</p><p className="break-all text-xs text-slate-500">{selected.order.customer_email}</p><p className="mt-1 text-xs text-slate-500">{selected.order.customer_phone}</p></div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><MapPin size={15} />Delivery preference</div><p className="mt-2 font-semibold">{humanize(selected.order.delivery_method)}</p><p className="mt-1 text-sm text-slate-600">{selected.order.delivery_address || 'Collection from us'}</p>{selected.order.delivery_instructions && <p className="mt-2 text-xs text-slate-500">{selected.order.delivery_instructions}</p>}</div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><FileText size={15} />Order notes</div><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{selected.order.customer_notes || 'No additional order notes.'}</p></div></div><OrderDetail bundle={selected} catalog={catalog} /></> : <p className="p-10 text-center text-sm text-slate-500">Order could not be loaded.</p>}</div>
+        <div className="p-4 sm:p-7">{detailLoading ? <div className="p-12 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 animate-spin text-brand-600" size={22} />Loading client order information…</div> : selected ? <><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><UserRound size={15} />Client</div><p className="mt-2 font-semibold">{selected.order.customer_name}</p><p className="break-all text-xs text-slate-500">{selected.order.customer_email}</p><p className="mt-1 text-xs text-slate-500">{selected.order.customer_phone}</p></div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><MapPin size={15} />Delivery preference</div><p className="mt-2 font-semibold">{humanize(selected.order.delivery_method)}</p><p className="mt-1 text-sm text-slate-600">{selected.order.delivery_address || 'Collection from us'}</p>{selected.order.delivery_instructions && <p className="mt-2 text-xs text-slate-500">{selected.order.delivery_instructions}</p>}</div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><FileText size={15} />Order notes</div><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{selected.order.customer_notes || 'No additional order notes.'}</p></div></div><OrderArtworkShare order={selected.order}/><div className="mt-5"><OrderDetail bundle={selected} catalog={catalog} /></div></> : <p className="p-10 text-center text-sm text-slate-500">Order could not be loaded.</p>}</div>
       </section>
     </div>}
   </div>;
