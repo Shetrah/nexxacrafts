@@ -52,19 +52,40 @@ Deno.serve(async request => {
       const orderId = text(payload.orderId, 50);
       const to = text(Deno.env.get('WHATSAPP_ADMIN_PHONE'), 30);
       if (!/^[0-9a-f-]{36}$/i.test(orderId) || !to) return json({ error: 'Order notification is not configured.' }, 400, origin);
+      const retry = payload.retry === true;
+      if (retry && !await isAdmin(url, anon, service, request.headers.get('authorization'))) return json({ error: 'Admin access is required to retry an order alert.' }, 403, origin);
       const orders = await db(url, service, `orders?select=id,reference,customer_name,customer_email,customer_phone,status,payment_status,total&id=eq.${encodeURIComponent(orderId)}&limit=1`) as Array<Record<string, unknown>>;
       const order = orders[0];
       if (!order) return json({ error: 'Order was not found.' }, 404, origin);
       const idempotencyKey = `new-order:${orderId}`;
-      const inserted = await db(url, service, 'whatsapp_delivery_logs', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify({ order_id: orderId, kind: 'new_order_admin', recipient: to, idempotency_key: idempotencyKey, status: 'pending' }) }) as Array<Record<string, unknown>>;
-      if (!inserted?.length) return json({ ok: true, alreadyNotified: true }, 200, origin);
+      const existingRows = await db(url, service, `whatsapp_delivery_logs?select=id,status&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`) as Array<Record<string, unknown>>;
+      let deliveryLog = existingRows[0];
+      if (deliveryLog?.status === 'sent') return json({ ok: true, alreadyNotified: true }, 200, origin);
+      if (deliveryLog && !retry) return json({ error: 'The first WhatsApp alert failed. An admin can retry it from the order details.' }, 502, origin);
+      if (deliveryLog && retry) {
+        await db(url, service, `whatsapp_delivery_logs?id=eq.${encodeURIComponent(String(deliveryLog.id))}`, { method: 'PATCH', body: JSON.stringify({ status: 'pending', error: null, recipient: to }) });
+      } else {
+        try {
+          const inserted = await db(url, service, 'whatsapp_delivery_logs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ order_id: orderId, kind: 'new_order_admin', recipient: to, idempotency_key: idempotencyKey, status: 'pending' }) }) as Array<Record<string, unknown>>;
+          deliveryLog = inserted?.[0];
+        } catch (insertError) {
+          // Handle two near-simultaneous checkout retries without turning a
+          // duplicate insert into a false successful delivery.
+          const concurrentRows = await db(url, service, `whatsapp_delivery_logs?select=id,status&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`) as Array<Record<string, unknown>>;
+          deliveryLog = concurrentRows[0];
+          if (!deliveryLog) throw insertError;
+          if (deliveryLog.status === 'sent') return json({ ok: true, alreadyNotified: true }, 200, origin);
+          throw new Error('An order alert is already being processed. Retry it from the admin order details shortly.');
+        }
+      }
+      if (!deliveryLog?.id) throw new Error('Could not create the WhatsApp delivery record.');
       const message = `New NexxaCraft order ${text(order.reference, 60)}\nClient: ${text(order.customer_name, 120)}\nEmail: ${text(order.customer_email, 200)}\nPhone: ${text(order.customer_phone, 40)}\nStatus: ${text(order.status, 40)} · Payment: ${text(order.payment_status, 40)}\nTotal: KES ${Number(order.total || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
       try {
         const result = await whatsapp(apiKey, 'send', { to, message });
-        await db(url, service, `whatsapp_delivery_logs?id=eq.${encodeURIComponent(String(inserted[0].id))}`, { method: 'PATCH', body: JSON.stringify({ status: 'sent', provider_message_id: text(result.messageId, 160), sent_at: new Date().toISOString() }) });
+        await db(url, service, `whatsapp_delivery_logs?id=eq.${encodeURIComponent(String(deliveryLog.id))}`, { method: 'PATCH', body: JSON.stringify({ status: 'sent', provider_message_id: text(result.messageId, 160), sent_at: new Date().toISOString() }) });
         return json({ ok: true }, 200, origin);
       } catch (error) {
-        await db(url, service, `whatsapp_delivery_logs?id=eq.${encodeURIComponent(String(inserted[0].id))}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', error: error instanceof Error ? error.message.slice(0, 500) : 'WhatsApp delivery failed.' }) }).catch(() => {});
+        await db(url, service, `whatsapp_delivery_logs?id=eq.${encodeURIComponent(String(deliveryLog.id))}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', error: error instanceof Error ? error.message.slice(0, 500) : 'WhatsApp delivery failed.' }) }).catch(() => {});
         throw error;
       }
     }

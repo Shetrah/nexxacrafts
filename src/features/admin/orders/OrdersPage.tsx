@@ -114,8 +114,24 @@ function OrderArtworkShare({ order }: { order: OrderRow }) {
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
+  const [alertBusy, setAlertBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  async function retryTeamOrderAlert() {
+    if (!supabase) return;
+    setAlertBusy(true); setError(''); setNotice('');
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('whatsapp-messages', { body: { action: 'new-order', orderId: order.id, retry: true } });
+      if (invokeError) {
+        const response = (invokeError as typeof invokeError & { context?: Response }).context;
+        const details = response ? await response.clone().json().catch(() => null) : null;
+        throw new Error(details?.error || invokeError.message || 'Could not resend the team order alert.');
+      }
+      if (data?.error) throw new Error(data.error);
+      setNotice(data?.alreadyNotified ? 'The team WhatsApp alert was already delivered.' : 'Order alert accepted by WhatsApp for the team.');
+    } catch (sendError) { setError(sendError instanceof Error ? sendError.message : 'Could not resend the team order alert.'); }
+    finally { setAlertBusy(false); }
+  }
   async function share() {
     if (!supabase || !file) return;
     if (file.size > 100 * 1024 * 1024) { setError('Artwork files must be 100 MB or smaller.'); return; }
@@ -139,7 +155,7 @@ function OrderArtworkShare({ order }: { order: OrderRow }) {
     } catch (shareError) { setError(shareError instanceof Error ? shareError.message : 'Could not share the artwork.'); }
     finally { setBusy(false); }
   }
-  return <Card><CardHeader title="Design approval" description="Upload the designed artwork and send it to the client’s WhatsApp number for review." /><CardBody><div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="text-sm font-medium">Artwork file<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf" className="form-control mt-1 h-auto py-2" onChange={event=>setFile(event.target.files?.[0]||null)}/><span className="mt-1 block text-xs font-normal text-slate-500">PNG, JPG, WebP, SVG, or PDF · up to 100 MB</span></label><label className="text-sm font-medium">Message to client<input className="form-control mt-1" value={caption} onChange={event=>setCaption(event.target.value)} placeholder={`Please review design for ${order.reference}`}/></label><button type="button" disabled={!file||busy} onClick={()=>void share()} className="btn-primary">{busy?<Loader2 className="animate-spin" size={16}/>:<Send size={16}/>} Share artwork</button></div>{file&&<p className="mt-2 flex items-center gap-2 text-xs text-slate-500"><ImagePlus size={14}/>{file.name} · {(file.size/1024/1024).toFixed(1)} MB</p>}{error&&<p role="alert" className="mt-3 rounded-lg bg-danger-50 p-3 text-sm text-danger-800">{error}</p>}{notice&&<p role="status" className="mt-3 rounded-lg bg-success-50 p-3 text-sm text-success-800">{notice}</p>}</CardBody></Card>;
+  return <Card><CardHeader title="Design approval" description="Upload the designed artwork and send it to the client’s WhatsApp number for review." /><CardBody><div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><div><p className="text-sm font-semibold">Team order alert</p><p className="text-xs text-slate-500">Retry the alert if WhatsApp was unavailable when the order arrived.</p></div><button type="button" disabled={alertBusy} onClick={()=>void retryTeamOrderAlert()} className="btn-outline btn-sm">{alertBusy?<Loader2 className="animate-spin" size={14}/>:<Send size={14}/>} Retry team alert</button></div><div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="text-sm font-medium">Artwork file<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf" className="form-control mt-1 h-auto py-2" onChange={event=>setFile(event.target.files?.[0]||null)}/><span className="mt-1 block text-xs font-normal text-slate-500">PNG, JPG, WebP, SVG, or PDF · up to 100 MB</span></label><label className="text-sm font-medium">Message to client<input className="form-control mt-1" value={caption} onChange={event=>setCaption(event.target.value)} placeholder={`Please review design for ${order.reference}`}/></label><button type="button" disabled={!file||busy} onClick={()=>void share()} className="btn-primary">{busy?<Loader2 className="animate-spin" size={16}/>:<Send size={16}/>} Share artwork</button></div>{file&&<p className="mt-2 flex items-center gap-2 text-xs text-slate-500"><ImagePlus size={14}/>{file.name} · {(file.size/1024/1024).toFixed(1)} MB</p>}{error&&<p role="alert" className="mt-3 rounded-lg bg-danger-50 p-3 text-sm text-danger-800">{error}</p>}{notice&&<p role="status" className="mt-3 rounded-lg bg-success-50 p-3 text-sm text-success-800">{notice}</p>}</CardBody></Card>;
 }
 
 export default function OrdersPage() {

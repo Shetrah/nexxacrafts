@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.payhero-payments]
 verify_jwt = false
+
+# New-order alerts are sent after guest checkout, so the request must reach the
+# function even when the customer has no Supabase session. Admin-only actions
+# inside the function still validate the caller's role.
+[functions.whatsapp-messages]
+verify_jwt = false
