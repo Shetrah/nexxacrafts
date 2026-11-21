@@ -138,6 +138,20 @@ export const services: ServiceDefinition[] = [
     ],
   },
   {
+    slug: 'photo-mounting', name: 'Photo Mounting', category: 'Print',
+    tagline: 'Present photographs with a clean, professional mounted finish.',
+    description: 'Photo mounting in standard and custom sizes, with admin-managed per-size pricing and quantity-based totals.',
+    pricingMode: 'instant', turnaround: 'Confirmed at order review', icon: 'Image',
+    image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1200&q=85',
+    fields: [
+      { name: 'mounting_size', label: 'Mounting size', type: 'select', required: true, options: ['A5 (14.8 × 21 cm)', 'A4 (21 × 29.7 cm)', 'A3 (29.7 × 42 cm)', 'A2 (42 × 59.4 cm)', 'A1 (59.4 × 84.1 cm)', 'Custom size'], optionPrices: { 'A5 (14.8 × 21 cm)': 0, 'A4 (21 × 29.7 cm)': 0, 'A3 (29.7 × 42 cm)': 0, 'A2 (42 × 59.4 cm)': 0, 'A1 (59.4 × 84.1 cm)': 0, 'Custom size': 0 }, help: 'Each size price is set by an administrator and charged per mounted photo.' },
+      { name: 'custom_size', label: 'Custom size details (cm)', type: 'text', help: 'Enter width × height if you selected Custom size.', showWhen: { field: 'mounting_size', equals: 'Custom size' } },
+      { name: 'mounting_finish', label: 'Mount finish', type: 'select', options: ['Standard mount board', 'Foam board', 'Advise me'], optionPrices: { 'Standard mount board': 0, 'Foam board': 0, 'Advise me': 0 } },
+      { name: 'quantity', label: 'Quantity', type: 'number', min: 1, step: 1, required: true },
+      { name: 'notes', label: 'Additional instructions', type: 'textarea', help: 'Add framing, colour, or presentation preferences.' },
+    ],
+  },
+  {
     slug: 'laser-cutting', name: 'Laser Cutting & Engraving', category: 'Fabrication',
     tagline: 'Precision-cut and engraved custom components.',
     description: 'Acrylic signage, wood products, lettering, engraved gifts, decorative pieces and custom fabrication.',

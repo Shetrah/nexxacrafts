@@ -57,8 +57,8 @@ export default function InvoicesPage() {
       }
       const invoice = await createInvoice({ order_id: form.order_id || null, customer_name: form.customer_name, customer_email: form.customer_email, subtotal: Number(form.subtotal), tax: Number(form.tax || 0), total: Number(form.total), due_date: form.due_date || null, created_by: user.id });
       const issued = await updateInvoice(invoice.id, { status: 'issued', issued_at: new Date().toISOString() });
-      await sendInvoiceEmail(issued.id);
-      setNotice(`Invoice ${issued.invoice_number} was issued and emailed to ${issued.customer_email}.`); setOpen(false); setForm(blank()); await reload();
+      const delivery = await sendInvoiceEmail(issued.id);
+      setNotice(`Invoice ${issued.invoice_number} was issued and sent by ${[delivery.emailSent ? 'email' : '', delivery.whatsappSent ? 'WhatsApp' : ''].filter(Boolean).join(' and ')}.`); setOpen(false); setForm(blank()); await reload();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not create and send the invoice.'); }
     finally { setSaving(false); }
   }
@@ -68,7 +68,7 @@ export default function InvoicesPage() {
 
   async function send(invoice: InvoiceRow) {
     setSendingId(invoice.id); setError(''); setNotice('');
-    try { await sendInvoiceEmail(invoice.id); setNotice(`Invoice ${invoice.invoice_number} email accepted by Resend.`); await reload(); }
+    try { const delivery = await sendInvoiceEmail(invoice.id); setNotice(`Invoice ${invoice.invoice_number} sent by ${[delivery.emailSent ? 'email' : '', delivery.whatsappSent ? 'WhatsApp' : ''].filter(Boolean).join(' and ')}.`); await reload(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Invoice email could not be sent.'); }
     finally { setSendingId(''); }
   }

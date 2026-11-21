@@ -272,6 +272,7 @@ Deno.serve(async (request) => {
     const authorization = request.headers.get('authorization');
     const resendKey = Deno.env.get('RESEND_API_KEY');
     const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
+    const whatsappApiKey = Deno.env.get('WHATSAPP_API_KEY');
     // The order action calls this function server-to-server after it has already
     // verified the signed-in customer and created their invoice. Use the service
     // key as an internal proof so this second hop doesn't depend on forwarding a
@@ -289,36 +290,30 @@ Deno.serve(async (request) => {
     }
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
-      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at', id: `eq.${invoiceId}` });
+      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at,whatsapp_sent_at', id: `eq.${invoiceId}` });
       const invoiceResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
       if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}).`);
       const invoices = await invoiceResponse.json();
       const invoice = Array.isArray(invoices) ? invoices[0] : null;
       if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
       if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
-      if (!internalCheckout && invoice.order_id && payload.kind === 'checkout_invoice') {
-        const ownerQuery = new URLSearchParams({ select: 'customer_id', id: `eq.${invoice.order_id}`, limit: '1' });
-        const ownerResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${ownerQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
-        const ownerRows = ownerResponse.ok ? await ownerResponse.json() : [];
-        if (!Array.isArray(ownerRows) || ownerRows[0]?.customer_id !== authUser?.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
-      }
-      if (payload.kind === 'checkout_invoice' && invoice.sent_at) return json({ ok: true, invoiceEmailSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
-      if (payload.kind === 'checkout_invoice' && invoice.order_id) {
-        const orderQuery = new URLSearchParams({ select: 'customer_id,customer_email', id: `eq.${invoice.order_id}`, limit: '1' });
+      let invoicePhone = '';
+      if (invoice.order_id) {
+        const orderQuery = new URLSearchParams({ select: 'id,customer_id,customer_email,customer_phone', id: `eq.${invoice.order_id}`, limit: '1' });
         const orderResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${orderQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         const orderRows = orderResponse.ok ? await orderResponse.json() : [];
         const order = Array.isArray(orderRows) ? orderRows[0] : null;
         if (!order) return json({ error: 'The invoice order could not be verified.' }, 403, origin);
-        if (!internalCheckout) {
-          const ownerResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization! } });
-          const owner = ownerResponse.ok ? await ownerResponse.json() : null;
-          if (!owner || order.customer_id !== owner.id) return json({ error: 'The order owner could not be verified.' }, 403, origin);
-        }
+        if (payload.kind === 'checkout_invoice' && !internalCheckout && order.customer_id !== authUser?.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
         if (asText(order.customer_email, 254).toLowerCase() !== asText(invoice.customer_email, 254).toLowerCase()) return json({ error: 'The invoice recipient does not match the saved order.' }, 403, origin);
+        invoicePhone = asText(order.customer_phone, 40);
       }
+      if (payload.kind === 'checkout_invoice' && invoice.sent_at && invoice.whatsapp_sent_at) return json({ ok: true, invoiceEmailSent: true, whatsappInvoiceSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
       const recipient = asText(invoice.customer_email, 254);
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return json({ error: 'The invoice needs a valid customer email address.' }, 400, origin);
-      if (!resendKey || !fromEmail) return json({ error: 'Invoice email is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL in Supabase Edge Function secrets.' }, 503, origin);
+      const validRecipient = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
+      const emailConfigured = Boolean(resendKey && fromEmail && validRecipient);
+      if (!validRecipient && !whatsappApiKey) return json({ error: 'Add a valid customer email or configure WhatsApp delivery for this invoice.' }, 400, origin);
+      if (validRecipient && !emailConfigured && !whatsappApiKey) return json({ error: 'Invoice email is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL in Supabase Edge Function secrets.' }, 503, origin);
 
       const esc = escapeHtml;
       const currency = (value: unknown) => {
@@ -388,19 +383,54 @@ Deno.serve(async (request) => {
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
       const trackingButton = trackingUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(trackingUrl)}" style="display:inline-block;border:1px solid #ccd7eb;border-radius:9px;padding:12px 20px;color:#183db7;text-decoration:none;font-size:14px;font-weight:700">Track your order status</a><p style="font-size:11px;color:#76839a">Use your order reference to check progress any time.</p></td></tr>` : '';
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
-      const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
-      if (!sent.ok) {
-        const details = (await sent.text()).slice(0, 1000);
-        console.error('Resend rejected invoice email', sent.status, details);
-        return json({ error: `Email provider rejected delivery (${sent.status}). ${details}` }, 502, origin);
+      let invoiceEmailSent = Boolean(invoice.sent_at && payload.kind === 'checkout_invoice');
+      let invoiceEmailError = '';
+      if (validRecipient && !invoiceEmailSent && emailConfigured) {
+        try {
+          const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
+          if (!sent.ok) {
+            const details = (await sent.text()).slice(0, 1000);
+            invoiceEmailError = `Email provider rejected delivery (${sent.status}). ${details}`;
+            console.error('Resend rejected invoice email', sent.status, details);
+          } else {
+            const emailResult = await sent.json().catch(() => null);
+            invoiceEmailSent = true;
+            const markResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ sent_at: new Date().toISOString() }) });
+            if (!markResponse.ok) console.error('Invoice email accepted but sent_at could not be saved', markResponse.status, (await markResponse.text()).slice(0, 500));
+            console.log('Resend accepted invoice email', { emailId: emailResult?.id ?? 'unknown', invoiceNumber: invoice.invoice_number, recipient });
+          }
+        } catch (error) { invoiceEmailError = error instanceof Error ? error.message : 'Invoice email delivery failed.'; }
+      } else if (validRecipient && !invoiceEmailSent && !emailConfigured) {
+        invoiceEmailError = 'Email service is not configured; WhatsApp delivery will be attempted.';
       }
-      const emailResult = await sent.json().catch(() => null);
-      const sentAt = new Date().toISOString();
-      const markQuery = new URLSearchParams({ id: `eq.${invoiceId}` });
-      const markResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${markQuery}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ sent_at: sentAt }) });
-      if (!markResponse.ok) console.error('Invoice email accepted but sent_at could not be saved', markResponse.status, (await markResponse.text()).slice(0, 500));
-      console.log('Resend accepted invoice email', { emailId: emailResult?.id ?? 'unknown', invoiceNumber: invoice.invoice_number, recipient });
-      return json({ ok: true, invoiceEmailSent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
+
+      let whatsappInvoiceSent = Boolean(invoice.whatsapp_sent_at && payload.kind === 'checkout_invoice');
+      let whatsappInvoiceError = whatsappInvoiceSent ? '' : whatsappApiKey ? '' : 'WhatsApp delivery is not configured. Set WHATSAPP_API_KEY in Supabase Edge Function secrets.';
+      if (whatsappApiKey && invoicePhone && !whatsappInvoiceSent) {
+        const digits = invoicePhone.replace(/\D/g, '');
+        const to = digits.startsWith('0') && digits.length === 10 ? `254${digits.slice(1)}` : digits.startsWith('254') ? digits : digits.length === 9 ? `254${digits}` : '';
+        if (to) {
+          try {
+            const whatsappResponse = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/send', { method: 'POST', headers: { 'X-API-Key': whatsappApiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, message: `${text}\n\nPay this invoice online: ${paymentUrl || siteUrl}` }) });
+            const whatsappBodyText = await whatsappResponse.text();
+            let whatsappBody: Record<string, unknown> = {};
+            try { whatsappBody = JSON.parse(whatsappBodyText) as Record<string, unknown>; } catch { /* preserve provider status in the error */ }
+            if (!whatsappResponse.ok || whatsappBody.success !== true) {
+              whatsappInvoiceError = `WhatsApp provider rejected invoice (${whatsappResponse.status}): ${asText(whatsappBody.message || whatsappBody.error, 240) || whatsappBodyText.slice(0, 300)}`;
+              console.error(whatsappInvoiceError);
+            } else {
+              whatsappInvoiceSent = true;
+              const savedWhatsApp = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ whatsapp_sent_at: new Date().toISOString() }) });
+              if (!savedWhatsApp.ok) console.error('WhatsApp accepted invoice but whatsapp_sent_at could not be saved', savedWhatsApp.status, (await savedWhatsApp.text()).slice(0, 400));
+            }
+          } catch (error) { whatsappInvoiceError = error instanceof Error ? error.message : 'WhatsApp invoice delivery failed.'; }
+        } else whatsappInvoiceError = 'The saved customer phone number is not a valid Kenyan number.';
+      } else if (whatsappApiKey && !invoicePhone) whatsappInvoiceError = 'No customer phone number is saved for WhatsApp delivery.';
+
+      if (!invoiceEmailSent && !whatsappInvoiceSent) {
+        return json({ error: [invoiceEmailError, whatsappInvoiceError].filter(Boolean).join(' · ') || 'No invoice delivery channel accepted the message.', invoiceEmailSent, whatsappInvoiceSent, invoiceNumber: invoice.invoice_number }, 502, origin);
+      }
+      return json({ ok: true, invoiceEmailSent, whatsappInvoiceSent, invoiceEmailError: invoiceEmailError || undefined, whatsappInvoiceError: whatsappInvoiceError || undefined, invoiceNumber: invoice.invoice_number }, 200, origin);
     } catch (error) {
       console.error('Could not send invoice email', error);
       return json({ error: error instanceof Error ? error.message : 'Could not send invoice email.' }, 500, origin);
@@ -443,7 +473,9 @@ Deno.serve(async (request) => {
       const validItems = Array.isArray(savedItems) ? savedItems : [];
       let emailSent = false;
       let invoiceEmailSent = false;
+      let invoiceWhatsappSent = false;
       let invoiceEmailError = '';
+      let invoiceWhatsappError = '';
       if (savedOrder.total !== null && Number(savedOrder.total) > 0) {
         try {
           const invoiceQuery = new URLSearchParams({ select: 'id,invoice_number', order_id: `eq.${savedOrder.id}`, limit: '1' });
@@ -473,10 +505,12 @@ Deno.serve(async (request) => {
             if (!linkResponse.ok) throw new Error(`Invoice payment link failed (${linkResponse.status}).`);
           }
           const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${serviceKey}`, 'x-nexxacraft-internal': serviceKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
-          invoiceEmailSent = invoiceEmail.ok && (await invoiceEmail.json().catch(() => ({}))).invoiceEmailSent === true;
+          const invoiceDelivery = await invoiceEmail.json().catch(() => ({}));
+          invoiceEmailSent = invoiceEmail.ok && invoiceDelivery.invoiceEmailSent === true;
+          invoiceWhatsappSent = invoiceEmail.ok && invoiceDelivery.whatsappInvoiceSent === true;
+          invoiceWhatsappError = asText(invoiceDelivery.whatsappInvoiceError, 500);
           if (!invoiceEmailSent) {
-            const detail = await invoiceEmail.json().catch(() => ({}));
-            invoiceEmailError = asText(detail.error, 500) || `Invoice email request failed (${invoiceEmail.status}).`;
+            invoiceEmailError = asText(invoiceDelivery.invoiceEmailError || invoiceDelivery.error, 500) || (invoiceEmail.ok ? 'Invoice email was not sent.' : `Invoice request failed (${invoiceEmail.status}).`);
             console.error('Auto invoice created but invoice email was not accepted', invoiceEmail.status, invoiceEmailError);
           }
         } catch (error) {
@@ -492,7 +526,7 @@ Deno.serve(async (request) => {
       try {
         whatsappSent = await sendOrderWhatsApp({ ...order, name: savedOrder.customer_name, email: savedOrder.customer_email, phone: savedOrder.customer_phone, reference: savedOrder.reference, items: validItems });
       } catch (error) { console.error('Could not send the order WhatsApp notification', error); }
-      return json({ ok: true, notificationSent: whatsappSent, customerEmailSent: emailSent, invoiceEmailSent, invoiceEmailError }, 200, origin);
+      return json({ ok: true, notificationSent: whatsappSent, customerEmailSent: emailSent, invoiceEmailSent, invoiceWhatsappSent, invoiceEmailError, invoiceWhatsappError }, 200, origin);
     } catch (error) {
       console.error('Could not send customer order confirmation', error);
       return json({ ok: true, notificationSent: false, customerEmailSent: false }, 200, origin);

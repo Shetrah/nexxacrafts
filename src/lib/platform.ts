@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { CartItem } from '../context/CartContext';
 
-export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; notificationSent?: boolean; whatsappNotificationSent?: boolean; whatsappNotificationError?: string; customerEmailSent?: boolean; invoiceEmailSent?: boolean; invoiceEmailError?: string; }
+export interface RequestResult { id: string; reference: string; mode: 'live' | 'demo'; notificationSent?: boolean; whatsappNotificationSent?: boolean; whatsappNotificationError?: string; customerEmailSent?: boolean; invoiceEmailSent?: boolean; invoiceWhatsappSent?: boolean; invoiceEmailError?: string; invoiceWhatsappError?: string; }
 const DEMO_KEYS = { quotes: 'nexxacrafts-demo-quotes', orders: 'nexxacrafts-demo-orders' };
 // Tracking works with a reference alone, so new references need a high-entropy random suffix.
 const makeReference = (prefix: string) => `${prefix}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
@@ -80,14 +80,14 @@ export async function submitOrder(input: { name: string; email: string; phone: s
       body: { kind: 'order', order: { ...input, reference: row.reference } },
     });
     if (notificationError) console.error('Order saved, but email notifications could not be requested.', notificationError);
-    return { id: row.id, reference: row.reference, mode: 'live', notificationSent: whatsappNotificationSent, whatsappNotificationSent, whatsappNotificationError, customerEmailSent: notification?.customerEmailSent === true, invoiceEmailSent: notification?.invoiceEmailSent === true, invoiceEmailError: typeof notification?.invoiceEmailError === 'string' ? notification.invoiceEmailError : undefined };
+    return { id: row.id, reference: row.reference, mode: 'live', notificationSent: whatsappNotificationSent, whatsappNotificationSent, whatsappNotificationError, customerEmailSent: notification?.customerEmailSent === true, invoiceEmailSent: notification?.invoiceEmailSent === true, invoiceWhatsappSent: notification?.invoiceWhatsappSent === true, invoiceEmailError: typeof notification?.invoiceEmailError === 'string' ? notification.invoiceEmailError : undefined, invoiceWhatsappError: typeof notification?.invoiceWhatsappError === 'string' ? notification.invoiceWhatsappError : undefined };
   }
   const id = crypto.randomUUID();
   writeDemo(DEMO_KEYS.orders, { id, reference, ...input, status: 'awaiting_review', payment_status: 'unpaid', created_at: new Date().toISOString() });
   return { id, reference, mode: 'demo', notificationSent: false };
 }
 
-export async function sendInvoiceEmail(invoiceId: string): Promise<void> {
+export async function sendInvoiceEmail(invoiceId: string): Promise<{ emailSent: boolean; whatsappSent: boolean }> {
   if (!supabase) throw new Error('Connect Supabase before sending an invoice email.');
   const { data, error } = await supabase.functions.invoke('contact-email', { body: { kind: 'invoice', invoiceId } });
   if (error) {
@@ -101,7 +101,10 @@ export async function sendInvoiceEmail(invoiceId: string): Promise<void> {
     } catch { /* Preserve the invocation error if no JSON response details are available. */ }
     throw new Error(message || 'Could not send the invoice email.');
   }
-  if (!data?.invoiceEmailSent) throw new Error(data?.error || 'The invoice email was not accepted by the email provider.');
+  const emailSent = data?.invoiceEmailSent === true;
+  const whatsappSent = data?.whatsappInvoiceSent === true;
+  if (!emailSent && !whatsappSent) throw new Error(data?.error || 'Invoice delivery was not accepted by email or WhatsApp.');
+  return { emailSent, whatsappSent };
 }
 
 export function getDemoRecords(kind: 'quotes' | 'orders') { return readDemo(DEMO_KEYS[kind]); }
