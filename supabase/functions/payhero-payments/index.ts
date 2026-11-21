@@ -15,6 +15,23 @@ async function rest(url:string,key:string,path:string,init:RequestInit={}){const
 const money=(v:unknown)=>`KES ${Number(v).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 function normalizePhone(input:string){const d=input.replace(/\D/g,'');if(/^0[71]\d{8}$/.test(d))return `254${d.slice(1)}`;if(/^254[71]\d{8}$/.test(d))return d;if(/^[71]\d{8}$/.test(d))return `254${d}`;throw new Error('Enter a valid Kenyan M-Pesa phone number.');}
 
+async function discoverPayheroChannel(authorization:string, preferredChannelId:number){
+  const response=await fetch('https://backend.payhero.co.ke/api/v2/payment_channels',{headers:{Authorization:authorization,Accept:'application/json'}});
+  const raw=await response.text();let data:Record<string,unknown>={};try{data=JSON.parse(raw) as Record<string,unknown>;}catch{/* handled as an invalid provider response below */}
+  if(!response.ok)throw new Error(`PayHero channel lookup failed (HTTP ${response.status}). ${text(data.message??data.error,220)}`);
+  const channels=Array.isArray(data.payment_channels)?data.payment_channels as Array<Record<string,unknown>>:[];
+  const active=channels.filter(channel=>channel.is_active===true||String(channel.is_active).toLowerCase()==='true');
+  const eligible=active.filter(channel=>{
+    const type=text(channel.channel_type,30).toLowerCase();
+    return ['till','paybill','wallet'].includes(type)||Boolean(text(channel.transaction_type,40));
+  });
+  const selected=(preferredChannelId>0?eligible.find(channel=>Number(channel.id)===preferredChannelId):undefined)??eligible[0];
+  if(!selected)throw new Error('PayHero has no active M-Pesa channel. Activate a payment channel in PayHero or set PAYHERO_CHANNEL_ID to an active channel.');
+  const id=Number(selected.id),accountId=Number(selected.account_id);
+  if(!Number.isInteger(id)||id<=0||!Number.isInteger(accountId)||accountId<=0)throw new Error('PayHero returned an active channel without a valid channel ID and account ID.');
+  return {id,accountId,description:text(selected.description,100)};
+}
+
 async function deliverPendingEmails(url:string,service:string,paymentId:unknown){
   const id=String(paymentId);let rows=await rest(url,service,`payment_email_outbox?select=*&payment_id=eq.${encodeURIComponent(id)}&limit=1`) as Array<Record<string,unknown>>;let row=rows[0];
   // Older/manual payments may predate the outbox insert. Rebuild it from the
@@ -60,13 +77,17 @@ Deno.serve(async(req)=>{
 
   if(action==='callback'){
     const response=(payload.response&&typeof payload.response==='object'?payload.response:payload) as Record<string,unknown>;
-    const ref=text(response.ExternalReference??payload.user_reference,100),status=text(response.Status,30).toLowerCase(),success=payload.status===true&&status==='success'&&Number(response.ResultCode)===0;
+    const ref=text(response.ExternalReference??response.external_reference??payload.user_reference??payload.external_reference??payload.reference,100),status=text(response.Status??response.status,30).toLowerCase(),callbackFlag=payload.status===true||String(payload.status).toLowerCase()==='true',success=callbackFlag&&['success','successful','paid','completed'].includes(status)&&(response.ResultCode===undefined||Number(response.ResultCode)===0);
     if(!ref)return json({received:true},200,origin);
     try{
-      const query=new URLSearchParams({select:'id,invoice_id,amount,status,order_id,provider_reference',provider:'eq.payhero',provider_reference:`eq.${ref}`,limit:'1'});
+      const query=new URLSearchParams({select:'id,invoice_id,amount,status,order_id,provider_reference,transaction_reference',provider:'eq.payhero',provider_reference:`eq.${ref}`,limit:'1'});
       const rows=await rest(url,service,`payments?${query}`) as Array<Record<string,unknown>>,payment=rows[0];if(!payment)return json({received:true},200,origin);
       if(!success){if(payment.status==='initiated')await rest(url,service,`payments?id=eq.${payment.id}&status=eq.initiated`,{method:'PATCH',body:JSON.stringify({status:'failed',failure_reason:text(response.ResultDesc,300)||'Payment was not completed.'})});return json({received:true},200,origin);}
       const amount=Number(response.Amount);if(!Number.isFinite(amount)||amount<=0)return json({received:true},200,origin);
+      // Older deployments stored the PayHero request reference in this column.
+      // The confirmation RPC reserves transaction_reference for the actual
+      // M-Pesa receipt number and otherwise treats the payment as already done.
+      if(text(payment.transaction_reference,160).startsWith('PayHero '))await rest(url,service,`payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`,{method:'PATCH',body:JSON.stringify({transaction_reference:null})});
       const claimed=await rest(url,service,'rpc/confirm_payhero_payment',{method:'POST',body:JSON.stringify({p_external_reference:ref,p_provider_reference:text(response.PayHeroReference??response.reference,100),p_transaction_reference:text(response.MpesaReceiptNumber,100),p_paid_amount:amount,p_phone:text(response.Phone,40)})}) as Array<Record<string,unknown>>;
       const paid=claimed?.[0];if(!paid)return json({received:true},200,origin);
       try{await notifyAdmins(url,service,paid.payment_id);}catch(e){console.error('Admin dashboard notification failed',e);}
@@ -125,21 +146,64 @@ Deno.serve(async(req)=>{
   if(action==='status'){
     const invoiceId=text(payload.invoiceId,50);if(!/^[0-9a-f-]{36}$/i.test(invoiceId))return json({error:'Invalid invoice.'},400,origin);
     try{
-      const query=new URLSearchParams({select:'status,amount,transaction_reference,confirmed_at,receipt_sent_at,created_at',invoice_id:`eq.${invoiceId}`,provider:'eq.payhero',order:'created_at.desc',limit:'1'});
+      const query=new URLSearchParams({select:'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,created_at',invoice_id:`eq.${invoiceId}`,provider:'eq.payhero',order:'created_at.desc',limit:'1'});
       const rows=await rest(url,service,`payments?${query}`) as Array<Record<string,unknown>>;
-      const payment=rows[0];if(!payment)return json({payment:null},200,origin);
+      let payment=rows[0];if(!payment)return json({payment:null},200,origin);
+      if(['initiated','pending'].includes(text(payment.status,30))){
+        const username=Deno.env.get('PAYHERO_API_USERNAME')?.trim(),password=Deno.env.get('PAYHERO_API_PASSWORD')?.trim(),basicToken=Deno.env.get('PAYHERO_BASIC_AUTH_TOKEN')?.trim();
+        const authorization=basicToken?(basicToken.startsWith('Basic ')?basicToken:`Basic ${basicToken}`):(username&&password?`Basic ${btoa(`${username}:${password}`)}`:'');
+        if(authorization){
+          const storedProviderReference=text(payment.provider_reference,180),storedTransactionReference=text(payment.transaction_reference,180).replace(/^PayHero\s+/i,'');
+          const candidates=[storedTransactionReference,storedProviderReference].filter((value,index,all)=>/^[A-Za-z0-9._:-]{3,180}$/.test(value)&&all.indexOf(value)===index);
+          let providerData:Record<string,unknown>|null=null;
+          for(const candidate of candidates){
+            try{
+              const lookup=await fetch('https://api.payhero.africa/api/global/transaction-status',{method:'POST',headers:{Authorization:authorization,Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({request_id:candidate})});
+              const raw=await lookup.text();let parsed:Record<string,unknown>={};try{parsed=JSON.parse(raw) as Record<string,unknown>;}catch{/* Try another known provider reference. */}
+              if(lookup.ok){providerData=parsed;break;}
+              console.warn('PayHero transaction status lookup was not accepted',{status:lookup.status,requestId:candidate,response:raw.slice(0,250)});
+            }catch(error){console.warn('PayHero transaction status lookup failed',error);}
+          }
+          if(providerData){
+            let detail=providerData;
+            for(const key of ['data','transaction','result'])if(detail[key]&&typeof detail[key]==='object'&&!Array.isArray(detail[key])){detail=detail[key] as Record<string,unknown>;break;}
+            const providerStatus=text(detail.status??detail.payment_status??detail.transaction_status??detail.state,40).toLowerCase();
+            const successFlag=detail.success===true||String(detail.success).toLowerCase()==='true';
+            const failed=['failed','failure','cancelled','canceled','rejected','declined','expired'].includes(providerStatus)||(detail.success===false&&providerStatus!==''&&!['queued','pending','processing','initiated','in_progress','waiting'].includes(providerStatus));
+            const successful=['success','successful','paid','completed','complete','settled'].includes(providerStatus)||successFlag;
+            if(failed){
+              await rest(url,service,`payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`,{method:'PATCH',body:JSON.stringify({status:'failed',failure_reason:text(detail.message??detail.error_message??detail.description,300)||'Payment was not completed.'})});
+              payment={...payment,status:'failed'};
+            }else if(successful){
+            const amount=Number(detail.amount??detail.paid_amount??detail.Amount??payment.amount);
+              if(Number.isFinite(amount)&&amount>0){
+                if(text(payment.transaction_reference,160).startsWith('PayHero '))await rest(url,service,`payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`,{method:'PATCH',body:JSON.stringify({transaction_reference:null})});
+                const confirmed=await rest(url,service,'rpc/confirm_payhero_payment',{method:'POST',body:JSON.stringify({p_external_reference:storedProviderReference,p_provider_reference:text(detail.PayHeroReference??detail.reference,100),p_transaction_reference:text(detail.MpesaReceiptNumber??detail.transaction_reference??detail.receipt_number,100),p_paid_amount:amount,p_phone:text(detail.Phone??detail.phone_number??detail.phone,40)})}) as Array<Record<string,unknown>>;
+                const confirmedPayment=confirmed?.[0];
+                if(confirmedPayment){
+                  try{await notifyAdmins(url,service,confirmedPayment.payment_id);}catch(error){console.error('Admin dashboard notification failed',error);}
+                  try{await deliverPendingEmails(url,service,confirmedPayment.payment_id);}catch(error){console.error('Payment was recorded, but email delivery is pending retry',error);}
+                  const refreshed=await rest(url,service,`payments?${query}`) as Array<Record<string,unknown>>;
+                  payment=refreshed[0]??{...payment,status:'confirmed',amount,transaction_reference:text(detail.MpesaReceiptNumber??detail.transaction_reference,100)};
+                }
+              }
+            }
+          }
+        }
+      }
       return json({payment:{status:payment.status,amount:payment.amount,transaction_reference:payment.transaction_reference,confirmed_at:payment.confirmed_at,receipt_sent_at:payment.receipt_sent_at}},200,origin);
     }catch(e){return json({error:e instanceof Error?e.message:'Could not check payment status.'},500,origin);}
   }
   if(action==='initiate'){
     const invoiceId=text(payload.invoiceId,50);let phone='';try{phone=normalizePhone(text(payload.phone,40));}catch(e){return json({error:e instanceof Error?e.message:'Invalid phone number.'},400,origin);}
-    const username=Deno.env.get('PAYHERO_API_USERNAME')?.trim(),password=Deno.env.get('PAYHERO_API_PASSWORD')?.trim(),basicToken=Deno.env.get('PAYHERO_BASIC_AUTH_TOKEN')?.trim(),channel=Number(Deno.env.get('PAYHERO_CHANNEL_ID')||6751);
+    const username=Deno.env.get('PAYHERO_API_USERNAME')?.trim(),password=Deno.env.get('PAYHERO_API_PASSWORD')?.trim(),basicToken=Deno.env.get('PAYHERO_BASIC_AUTH_TOKEN')?.trim(),preferredChannel=Number(Deno.env.get('PAYHERO_CHANNEL_ID')||0);
     const authorization=basicToken?(basicToken.startsWith('Basic ')?basicToken:`Basic ${basicToken}`):(username&&password?`Basic ${btoa(`${username}:${password}`)}`:'');
-    if(!authorization||!Number.isInteger(channel))return json({error:'PayHero is not fully configured. Set PAYHERO_BASIC_AUTH_TOKEN or both PAYHERO_API_USERNAME and PAYHERO_API_PASSWORD, plus a valid channel ID.'},503,origin);
+    if(!authorization||!Number.isInteger(preferredChannel))return json({error:'PayHero is not fully configured. Set PAYHERO_BASIC_AUTH_TOKEN or both PAYHERO_API_USERNAME and PAYHERO_API_PASSWORD. PAYHERO_CHANNEL_ID is optional; active channels are discovered automatically.'},503,origin);
     try{
     const iq=new URLSearchParams({select:'id,invoice_number,customer_name,customer_email,total,amount_paid,status,order_id',id:`eq.${invoiceId}`,limit:'1'}),invoices=await rest(url,service,`invoices?${iq}`) as Array<Record<string,unknown>>,invoice=invoices[0];if(!invoice||!invoice.order_id||['draft','void','paid'].includes(text(invoice.status)))return json({error:'This invoice cannot be paid.'},400,origin);
       const oq=new URLSearchParams({select:'id,customer_name,customer_phone',id:`eq.${invoice.order_id}`,limit:'1'}),orders=await rest(url,service,`orders?${oq}`) as Array<Record<string,unknown>>,order=orders[0];if(!order)return json({error:'Invoice order details are unavailable.'},404,origin);
       const amount=Math.ceil(Number(invoice.total)-Number(invoice.amount_paid));if(!Number.isFinite(amount)||amount<1)return json({error:'Invoice has no balance due.'},400,origin);
+      const channel=await discoverPayheroChannel(authorization,preferredChannel);
       const activeQuery=new URLSearchParams({select:'id',invoice_id:`eq.${invoice.id}`,provider:'eq.payhero',status:'in.(pending,initiated)',limit:'1'}),activeRows=await rest(url,service,`payments?${activeQuery}`) as Array<{id:string}>;
       if(activeRows.length)return json({error:'There is already an M-Pesa request awaiting a response. Complete or wait for it before requesting another prompt.'},409,origin);
       const externalRef=`${text(invoice.invoice_number,60)}-${crypto.randomUUID().replace(/-/g,'').slice(0,10).toUpperCase()}`;
@@ -151,17 +215,19 @@ Deno.serve(async(req)=>{
       }
       if(!payment?.id)return json({error:'Could not start an M-Pesa request.'},502,origin);
       const callbackUrl=`${url}/functions/v1/payhero-payments?action=callback`;
-      const response=await fetch('https://backend.payhero.co.ke/api/v2/payments',{method:'POST',headers:{Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({amount,phone_number:phone,channel_id:channel,provider:'m-pesa',external_reference:externalRef,customer_name:text(invoice.customer_name,120),callback_url:callbackUrl})});
+      const response=await fetch('https://backend.payhero.co.ke/api/v2/payments',{method:'POST',headers:{Authorization:authorization,Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({amount,phone_number:phone,provider:'m-pesa',channel_id:channel.id,account_id:channel.accountId,external_reference:externalRef,customer_name:text(invoice.customer_name,120),callback_url:callbackUrl})});
       const responseBody=await response.text();let data:Record<string,unknown>={};try{data=JSON.parse(responseBody) as Record<string,unknown>;}catch{/* Provider may return an empty or non-JSON response. */}
-      if(!response.ok||data.success!==true){
+      const responseStatus=text(data.status??data.message,40).toLowerCase();
+      const explicitFailure=data.success===false||['failed','failure','error','rejected','cancelled','canceled'].includes(responseStatus);
+      const hasCheckoutReference=Boolean(text(data.reference,160)||text(data.CheckoutRequestID,160)||text(data.checkout_request_id,160));
+      if(!response.ok||explicitFailure||(!hasCheckoutReference&&data.success!==true)){
         const providerMessage=text(data.message??data.error??data.detail??data.description,300);
         const failureReason=`PayHero HTTP ${response.status}${providerMessage?`: ${providerMessage}`:''}`;
-        console.error('PayHero rejected the STK push request',{status:response.status,channel,providerMessage,externalReference:externalRef});
+        console.error('PayHero rejected the STK push request',{status:response.status,channel:channel.id,account:channel.accountId,providerMessage,externalReference:externalRef,response:responseBody.slice(0,500)});
         await rest(url,service,`payments?id=eq.${payment.id}`,{method:'PATCH',body:JSON.stringify({status:'failed',failure_reason:failureReason})});
         return json({error:`PayHero rejected the M-Pesa request (HTTP ${response.status}).${providerMessage?` ${providerMessage}`:''}`},502,origin);
       }
-      if(typeof data.reference==='string')await rest(url,service,`payments?id=eq.${payment.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({transaction_reference:`PayHero ${data.reference}`})});
-      return json({ok:true,paymentId:payment.id,reference:externalRef,status:data.status||'QUEUED'},200,origin);
+      return json({ok:true,paymentId:payment.id,reference:externalRef,checkoutRequestId:text(data.CheckoutRequestID??data.checkout_request_id,160),status:data.status||'QUEUED',channel:channel.description||String(channel.id)},200,origin);
     }catch(e){console.error('Could not initiate PayHero payment',e);return json({error:e instanceof Error?e.message:'Could not start M-Pesa payment.'},500,origin);}
   }
 });
