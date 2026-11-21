@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CalendarClock, ClipboardList, Download, FileText, ImagePlus, Loader2, MapPin, PackageSearch, Plus, Send, UserRound, Trash2 } from 'lucide-react';
 import { Card, CardBody, CardHeader, Modal, SpecList, StatusBadge, useToast } from '@/components/ui';
 import { useAdmin } from '../AdminContext';
@@ -161,6 +161,7 @@ function OrderArtworkShare({ order }: { order: OrderRow }) {
 export default function OrdersPage() {
   const { refreshKey, refresh } = useAdmin();
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [catalog, setCatalog] = useState<ServiceRow[]>([]);
@@ -308,16 +309,72 @@ export default function OrdersPage() {
   }
 
   async function deleteOrder(order: OrderRow) {
-    if (!supabase || !window.confirm(`Delete order ${order.reference}? This permanently removes its order records.`)) return;
+    if (!supabase || !window.confirm(`Delete order ${order.reference}? This permanently removes its invoice, payment/order records, proofs, and uploaded files.`)) return;
     setDeletingId(order.id);
     try {
+      const bundle = await getOrderBundle(order.id);
+      if (!bundle) throw new Error('Order details could not be loaded for cleanup. Nothing was deleted.');
+      const customerFiles = new Set<string>();
+      for (const item of bundle.items) {
+        for (const path of item.files ?? []) {
+          if (path && !path.startsWith('DEMO FILE') && !/^https?:\/\//i.test(path)) customerFiles.add(path);
+        }
+        const itemConfig = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+          ? item.configuration as Record<string, unknown> : {};
+        const service = catalog.find(record => record.slug === item.service_slug);
+        const fileFields = Array.isArray(service?.fields) ? service.fields as unknown as ServiceField[] : [];
+        for (const field of fileFields.filter(candidate => candidate.type === 'file')) {
+          const raw = itemConfig[field.name];
+          if (typeof raw !== 'string' || !raw) continue;
+          let values: unknown = raw;
+          try { values = JSON.parse(raw) as unknown; } catch { /* A single storage path is also valid. */ }
+          for (const path of Array.isArray(values) ? values : [values]) {
+            if (typeof path === 'string' && path && !path.startsWith('DEMO FILE') && !/^https?:\/\//i.test(path)) customerFiles.add(path);
+          }
+        }
+      }
+      for (const proof of bundle.proofs) {
+        if (proof.file_path && !/^https?:\/\//i.test(proof.file_path)) customerFiles.add(proof.file_path);
+      }
+      const { data: artwork, error: artworkListError } = await supabase.storage.from('order-artwork').list(order.id, { limit: 1000 });
+      if (artworkListError) throw new Error(`Could not list this order’s artwork files: ${artworkListError.message}`);
+      const artworkPaths = (artwork ?? []).filter(file => file.name && file.id).map(file => `${order.id}/${file.name}`);
+      if (artworkPaths.length) {
+        const { error: artworkRemoveError } = await supabase.storage.from('order-artwork').remove(artworkPaths);
+        if (artworkRemoveError) throw new Error(`Could not remove the order’s artwork: ${artworkRemoveError.message}`);
+      }
+      const itemIds = bundle.items.map(item => item.id);
+      const removableCustomerFiles: string[] = [];
+      for (const path of customerFiles) {
+        const { data: otherItemRefs, error: referenceError } = await supabase.from('order_items').select('id').neq('order_id', order.id).overlaps('files', [path]).limit(1);
+        if (referenceError) throw new Error(`Could not check whether a client file is shared with another order: ${referenceError.message}`);
+        const { data: proofRefs, error: proofReferenceError } = await supabase.from('proof_reviews').select('order_item_id').eq('file_path', path).limit(20);
+        if (proofReferenceError) throw new Error(`Could not check whether a proof file is shared with another order: ${proofReferenceError.message}`);
+        const hasOtherProofRef = (proofRefs ?? []).some(proof => !itemIds.includes(proof.order_item_id));
+        if (!otherItemRefs?.length && !hasOtherProofRef) removableCustomerFiles.push(path);
+      }
+      if (removableCustomerFiles.length) {
+        const { error: filesRemoveError } = await supabase.storage.from('customer-files').remove(removableCustomerFiles);
+        if (filesRemoveError) throw new Error(`Could not remove the order’s client files: ${filesRemoveError.message}`);
+      }
       const { error: deleteError } = await supabase.rpc('delete_admin_order', { p_order_id: order.id });
       if (deleteError) throw deleteError;
       setOrders(current => current.filter(item => item.id !== order.id));
       if (selectedId === order.id) { setSelected(null); setSearchParams({}); }
-      toast.success(`Order ${order.reference} deleted.`);
+      toast.success(`Order ${order.reference}, its invoice records, and uploaded files were deleted.`);
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Could not delete order.'); }
     finally { setDeletingId(''); }
+  }
+
+  async function openOrderPayment(order: OrderRow) {
+    if (!supabase) return;
+    try {
+      const { data: invoices, error: invoiceError } = await supabase.from('invoices').select('id,total,amount_paid,status').eq('order_id', order.id).in('status', ['issued','partially_paid']).order('created_at', { ascending: false }).limit(10);
+      if (invoiceError) throw invoiceError;
+      const invoice = (invoices ?? []).find(row => Number(row.total) > Number(row.amount_paid));
+      if (!invoice) { toast.error('This order has no active invoice with a balance due. Create or issue its invoice in Finance → Invoices.'); return; }
+      navigate(`/pay/${invoice.id}`);
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Could not open the payment page for this order.'); }
   }
 
   const visibleOrders = useMemo(() => {
@@ -342,9 +399,10 @@ export default function OrdersPage() {
         <span className="min-w-0"><span className="block truncate font-semibold text-slate-900">{order.reference}</span><span className="mt-1 flex items-center gap-1 text-xs text-slate-500"><CalendarClock size={13} />{formatDateTime(order.created_at)}</span></span>
         <span className="min-w-0"><span className="block truncate text-sm font-medium text-slate-800">{order.customer_name}</span><span className="block truncate text-xs text-slate-500">{order.customer_email}</span></span>
         <span className="text-sm capitalize text-slate-600">{humanize(order.payment_status)}</span>
-        <StatusBadge {...statusMeta('order', order.status)} />
-        <ArrowRight className="hidden text-slate-400 sm:block" size={17} />
-        </button><button type="button" disabled={deletingId===order.id} onClick={()=>void deleteOrder(order)} className="btn-outline btn-sm text-red-700" aria-label={`Delete order ${order.reference}`}>{deletingId===order.id?<Loader2 size={14} className="animate-spin"/>:<Trash2 size={14}/>}<span className="sr-only sm:not-sr-only">Delete</span></button>
+        </button>
+        {order.status === 'awaiting_payment' && order.payment_status !== 'paid' ? <button type="button" onClick={()=>void openOrderPayment(order)} className="inline-flex w-fit items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100" title="Open this order’s invoice payment page">{statusMeta('order', 'awaiting_payment').label} <ArrowRight size={14}/></button> : <StatusBadge {...statusMeta('order', order.payment_status === 'paid' && order.status === 'awaiting_payment' ? 'awaiting_review' : order.status)} />}
+        <button type="button" onClick={() => setSearchParams({ order: order.id })} className="hidden text-slate-400 hover:text-brand-700 sm:block" aria-label={`Review order ${order.reference}`}><ArrowRight size={17} /></button>
+        <button type="button" disabled={deletingId===order.id} onClick={()=>void deleteOrder(order)} className="btn-outline btn-sm text-red-700" aria-label={`Delete order ${order.reference}`}>{deletingId===order.id?<Loader2 size={14} className="animate-spin"/>:<Trash2 size={14}/>}<span className="sr-only sm:not-sr-only">Delete</span></button>
       </div>)}</div>}
     </Card>
 
