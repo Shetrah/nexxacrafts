@@ -1285,6 +1285,8 @@ html[data-theme='dark'] .auth-confirmation-resend:hover { border-color:#7895ff; 
   background:linear-gradient(125deg,#0341fc 0%,#142853 66%,#ef4444 100%);
   content:"";
   pointer-events:none;
+  /* Keep the curtain invisible if browser motion settings suppress CSS animations. */
+  opacity:0;
   transform:scaleX(1);
   transform-origin:right center;
   animation:nc-brand-curtain 680ms cubic-bezier(.72,0,.22,1) both;
@@ -1295,8 +1297,8 @@ html[data-theme='dark'] .auth-confirmation-resend:hover { border-color:#7895ff; 
   100% { opacity:1; filter:blur(0); transform:translateY(0) scale(1); }
 }
 @keyframes nc-brand-curtain {
-  0% { transform:scaleX(1); }
-  100% { transform:scaleX(0); }
+  0% { opacity:1; transform:scaleX(1); }
+  100% { opacity:0; transform:scaleX(0); }
 }
 .route-transition-home { animation:nc-route-home 640ms cubic-bezier(.18,.72,.2,1) both; }
 .route-transition-services { animation:nc-route-services 590ms cubic-bezier(.18,.72,.2,1) both; }
@@ -1315,8 +1317,8 @@ html[data-theme='dark'] .auth-confirmation-resend:hover { border-color:#7895ff; 
 .route-transition-quote::before { animation:nc-brand-curtain-y 620ms cubic-bezier(.72,0,.22,1) both; transform-origin:center bottom; }
 .route-transition-track::before { transform-origin:left center; }
 .route-transition-account::before { animation:nc-brand-curtain-circle 610ms cubic-bezier(.72,0,.22,1) both; transform-origin:center; }
-@keyframes nc-brand-curtain-y { from { transform:scaleY(1); } to { transform:scaleY(0); } }
-@keyframes nc-brand-curtain-circle { from { clip-path:circle(150% at 100% 50%); } to { clip-path:circle(0 at 100% 50%); } }
+@keyframes nc-brand-curtain-y { from { opacity:1; transform:scaleY(1); } to { opacity:0; transform:scaleY(0); } }
+@keyframes nc-brand-curtain-circle { from { opacity:1; clip-path:circle(150% at 100% 50%); } to { opacity:0; clip-path:circle(0 at 100% 50%); } }
 @keyframes nc-route-home { from { opacity:0; filter:blur(5px); transform:translateY(18px) scale(.975); } 70% { opacity:1; filter:blur(0); transform:translateY(-2px) scale(1.004); } to { opacity:1; transform:translateY(0) scale(1); } }
 @keyframes nc-route-services { from { opacity:0; filter:blur(4px); transform:translateX(-24px); } to { opacity:1; filter:blur(0); transform:translateX(0); } }
 @keyframes nc-route-order { from { opacity:0; filter:blur(4px); transform:translateX(24px); } to { opacity:1; filter:blur(0); transform:translateX(0); } }
