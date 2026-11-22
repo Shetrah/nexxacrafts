@@ -3,7 +3,7 @@ import { CheckCircle2, Home, Loader2, Printer } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Logo } from '@/components/brand/Logo';
 
-export type PrintoutLine = { description: string; quantity: number; amount: number; details?: string[] };
+export type PrintoutLine = { description: string; quantity: number; amount: number };
 export type PrintoutKind = 'invoice' | 'receipt';
 
 export function CheckoutPrintout({
@@ -59,7 +59,7 @@ export function CheckoutPrintout({
           <div className="checkout-print-number"><div><small>{isReceipt ? 'RECEIPT NO.' : 'INVOICE NO.'}</small><strong>{number}</strong></div><div className="text-right"><small>ORDER REFERENCE</small><strong>{orderReference}</strong></div></div>
           <div className="checkout-print-billto"><small>{isReceipt ? 'RECEIVED FROM' : 'BILLED TO'}</small><strong>{customerName}</strong><span>{customerEmail}</span></div>
           <div className="checkout-print-lines"><div className="checkout-print-line header"><span>Description</span><span>Qty</span><span>Amount</span></div>
-            {lines.map((line,index)=><div className="checkout-print-line" key={`${line.description}-${index}`}><span>{line.description}{line.details?.map((detail,detailIndex)=><small className="checkout-print-line-detail" key={`${detailIndex}-${detail}`}>{detail}</small>)}</span><span>{line.quantity}</span><span>KES {line.amount.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>)}
+            {lines.map((line,index)=><div className="checkout-print-line" key={`${line.description}-${index}`}><span>{line.description}</span><span>{line.quantity}</span><span>KES {line.amount.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>)}
           </div>
           {!isReceipt&&subtotal!==undefined&&<div className="checkout-print-payment"><span>Subtotal</span><strong>KES {subtotal.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
           {!isReceipt&&tax!==undefined&&<div className="checkout-print-payment"><span>Tax</span><strong>KES {tax.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}

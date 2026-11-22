@@ -48,6 +48,16 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({
 
 const text = (s: unknown, n = 200) => typeof s === 'string' ? s.trim().slice(0, n) : '';
 
+function receiptItemName(item: Record<string, unknown>) {
+  const configuration = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+    ? item.configuration as Record<string, unknown> : {};
+  const product = Object.entries(configuration).find(([key, value]) => key.toLowerCase() === 'product' && typeof value === 'string')?.[1];
+  const serviceName = text(item.service_name, 140);
+  const productName = text(product, 100);
+  return productName && !serviceName.toLowerCase().includes(productName.toLowerCase())
+    ? `${serviceName} - ${productName}` : serviceName;
+}
+
 /** Encode UTF-8 safely before creating the HTTP Basic Authorization header. */
 function base64Utf8(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -286,8 +296,16 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
     ? await rest(url, service, `orders?select=reference,customer_phone&id=eq.${encodeURIComponent(String(paymentRecord.order_id))}&limit=1`) as Array<Record<string, unknown>>
     : [];
   const orderRecord = orderDetails[0];
+  const receiptItems = paymentRecord?.order_id
+    ? await rest(url, service, `order_items?select=service_name,configuration,quantity,confirmed_amount,estimated_amount&order_id=eq.${encodeURIComponent(String(paymentRecord.order_id))}&order=created_at.asc`) as Array<Record<string, unknown>>
+    : [];
 
-  const receipt = text(row.transaction_reference, 100);
+  const storedReceiptReference = text(row.transaction_reference, 100);
+  const receipt = storedReceiptReference.startsWith('PayHero ')
+    || ['confirmed', 'recorded by admin'].includes(storedReceiptReference.toLowerCase())
+    ? '' : storedReceiptReference;
+  const paymentMethod = text(row.payment_method, 40).toLowerCase() === 'bank' ? 'Bank' : 'M-Pesa';
+  const receiptReference = receipt || text(row.provider_reference, 100) || `${paymentMethod === 'Bank' ? 'BANK' : 'MPESA'}-${id.slice(0, 8).toUpperCase()}`;
   const amount = Number(row.payment_amount);
   const balance = Number(row.invoice_total) - Number(row.prior_amount_paid);
   const amountRemaining = Math.max(0, balance - amount);
@@ -302,13 +320,21 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
     customerName: text(row.customer_name, 120),
     customerEmail: text(row.customer_email, 254),
     date: paymentRecord?.confirmed_at ? new Date(String(paymentRecord.confirmed_at)).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }) : new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }),
-    lines: [{ description: `Payment for invoice ${text(row.invoice_number, 80)}`, quantity: 1, amount }],
+    lines: receiptItems.length
+      ? receiptItems.map(item => ({
+        description: receiptItemName(item) || 'Order item',
+        quantity: Number(item.quantity) || 1,
+        amount: Number(item.confirmed_amount ?? item.estimated_amount ?? 0),
+      }))
+      : [{ description: `Payment for invoice ${text(row.invoice_number, 80)}`, quantity: 1, amount }],
     total: Number(row.invoice_total),
     amountPaid: amount,
     balanceDue: Math.max(0, balance - amount),
-    paymentMethod: text(row.payment_method, 40),
-    transactionReference: receipt || 'Confirmed',
+    paymentMethod,
+    transactionReference: receiptReference,
   });
+  const receiptItemsHtml = receiptItems.map(item => `<tr><td style="padding:8px 0;border-bottom:1px solid #e6ebf4">${esc(receiptItemName(item) || 'Order item')}</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e6ebf4">${Number(item.quantity) || 1}</td></tr>`).join('');
+  const receiptItemsText = receiptItems.map(item => `${receiptItemName(item) || 'Order item'} × ${Number(item.quantity) || 1}`).join('\n');
   const receiptFilename = `${text(row.invoice_number, 80).replace(/[^a-zA-Z0-9_-]/g, '-')}-receipt.pdf`;
   const receiptStoragePath = text(row.receipt_pdf_path, 300) || `receipts/${id}.pdf`;
   let receiptPdfUrl = '';
@@ -321,8 +347,8 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
       await sendEmail(
         customerEmail,
         `Payment receipt · ${text(row.invoice_number, 80)}`,
-        emailFrame('Payment receipt', `<h1 style="margin:0 0 12px">Payment received</h1><p>Hello ${esc(row.customer_name)}, your payment has been confirmed.</p><div style="padding:16px;background:#f0f4ff;border-radius:10px"><p>Invoice: <b>${esc(row.invoice_number)}</b></p><p>Amount paid: <b>${formatMoney(amount)}</b></p><p>Receipt: <b>${esc(receipt || 'Confirmed')}</b></p><p>Balance due: <b>${formatMoney(amountRemaining)}</b></p></div><p>Thank you for choosing NexxaCraft.</p>`),
-        `Payment received for invoice ${text(row.invoice_number, 80)}. Amount ${formatMoney(amount)}. Receipt ${receipt}.`,
+        emailFrame('Payment receipt', `<h1 style="margin:0 0 12px">Payment received</h1><p>Hello ${esc(row.customer_name)}, your payment has been confirmed.</p><table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">${receiptItemsHtml}</table><div style="padding:16px;background:#f0f4ff;border-radius:10px"><p>Invoice: <b>${esc(row.invoice_number)}</b></p><p>Amount paid: <b>${formatMoney(amount)}</b></p><p>Payment method: <b>${paymentMethod}</b></p><p>Reference: <b>${esc(receiptReference)}</b></p><p>Balance due: <b>${formatMoney(amountRemaining)}</b></p></div><p>Thank you for choosing NexxaCraft.</p>`),
+        `Payment received for invoice ${text(row.invoice_number, 80)}. ${receiptItemsText ? `${receiptItemsText}\n` : ''}Amount ${formatMoney(amount)} via ${paymentMethod}. Reference ${receiptReference}.`,
         [{ filename: receiptFilename, content: pdfBase64(receiptPdf) }],
       );
 
@@ -362,7 +388,7 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
         });
         row.receipt_pdf_path = receiptStoragePath;
       }
-      const caption = `Payment received for invoice ${text(row.invoice_number, 80)}.\nAmount received: ${formatMoney(amount)}\nReceipt: ${receipt || 'Confirmed'}\nBalance remaining: ${formatMoney(amountRemaining)}\nThank you for choosing NexxaCraft.`;
+      const caption = `Payment received for invoice ${text(row.invoice_number, 80)}.\nAmount received: ${formatMoney(amount)}\nPayment reference: ${receiptReference}\nPayment method: ${paymentMethod}\nBalance remaining: ${formatMoney(amountRemaining)}\nThank you for choosing NexxaCraft.`;
       const response = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/media', {
         method: 'POST',
         headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
@@ -763,6 +789,7 @@ Deno.serve(async req => {
       const orders = await rest(url, service, `orders?${oq}`) as Array<Record<string, unknown>>;
       const order = orders[0];
       if (!order) return json({ error: 'Invoice order details are unavailable.' }, 404, origin);
+      const orderItems = await rest(url, service, `order_items?select=service_name,configuration,quantity,confirmed_amount,estimated_amount&order_id=eq.${encodeURIComponent(String(invoice.order_id))}&order=created_at.asc`) as Array<Record<string, unknown>>;
 
       return json({
         invoice: {
@@ -774,6 +801,11 @@ Deno.serve(async req => {
           total: invoice.total,
           amount_due: Math.max(0, Number(invoice.total) - Number(invoice.amount_paid)),
           status: invoice.status,
+          lines: orderItems.map(item => ({
+            description: receiptItemName(item) || 'Order item',
+            quantity: Number(item.quantity) || 1,
+            amount: Number(item.confirmed_amount ?? item.estimated_amount ?? 0),
+          })),
         },
         phone: order.customer_phone,
       }, 200, origin);

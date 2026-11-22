@@ -27,6 +27,16 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 
 const asText = (value: unknown, maxLength: number) => typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 
+function invoiceItemName(item: Record<string, unknown>) {
+  const configuration = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+    ? item.configuration as Record<string, unknown> : {};
+  const product = Object.entries(configuration).find(([key, value]) => key.toLowerCase() === 'product' && typeof value === 'string')?.[1];
+  const serviceName = asText(item.service_name, 140);
+  const productName = asText(product, 100);
+  return productName && !serviceName.toLowerCase().includes(productName.toLowerCase())
+    ? `${serviceName} - ${productName}` : serviceName;
+}
+
 function buildCustomerOrderEmail(order: Record<string, unknown>, items: Array<Record<string, unknown>>) {
   const esc = (value: unknown) => escapeHtml(asText(value, 500));
   const money = (value: unknown) => {
@@ -279,55 +289,27 @@ Deno.serve(async (request) => {
       let textItems = '';
       let invoicePdfLines: PaymentPdfLine[] = [];
       if (invoice.order_id) {
-        const itemsQuery = new URLSearchParams({ select: 'service_slug,service_name,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
+        const itemsQuery = new URLSearchParams({ select: 'service_name,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
         const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         if (!itemsResponse.ok) throw new Error(`Invoice order details lookup failed (${itemsResponse.status}).`);
         const invoiceItems = await itemsResponse.json();
         const validInvoiceItems = Array.isArray(invoiceItems) ? invoiceItems as Array<Record<string, unknown>> : [];
-        const slugs = [...new Set(validInvoiceItems.map(item => asText(item.service_slug, 100)).filter(Boolean))];
-        const serviceFields = new Map<string, Array<Record<string, unknown>>>();
-        if (slugs.length) {
-          const serviceQuery = new URLSearchParams({ select: 'slug,fields', slug: `in.(${slugs.join(',')})` });
-          const serviceResponse = await fetch(`${supabaseUrl}/rest/v1/services?${serviceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
-          if (serviceResponse.ok) {
-            const services = await serviceResponse.json();
-            for (const service of Array.isArray(services) ? services : []) serviceFields.set(asText(service.slug, 100), Array.isArray(service.fields) ? service.fields : []);
-          }
-        }
-        const detailsFor = (item: Record<string, unknown>) => {
-          const configuration = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration) ? item.configuration as Record<string, unknown> : {};
-          const fields = serviceFields.get(asText(item.service_slug, 100)) ?? [];
-          return Object.entries(configuration).flatMap(([key, rawValue]) => {
-            if (rawValue === null || rawValue === undefined || rawValue === '' || rawValue === false) return [];
-            const definition = fields.find(field => field.name === key);
-            const label = asText(definition?.label, 100) || key.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
-            let value = typeof rawValue === 'boolean' ? (rawValue ? 'Yes' : 'No') : String(rawValue);
-            if (definition?.type === 'file') {
-              try { const parsed = JSON.parse(value); value = Array.isArray(parsed) ? `${parsed.length} file${parsed.length === 1 ? '' : 's'} attached` : 'File attached'; }
-              catch { value = 'File attached'; }
-            }
-            const optionPrice = definition?.type === 'select' && definition.optionPrices && typeof definition.optionPrices === 'object'
-              ? Number((definition.optionPrices as Record<string, unknown>)[String(rawValue)] ?? 0) : 0;
-            return [{ label, value, optionPrice: Number.isFinite(optionPrice) ? optionPrice : 0 }];
-          });
-        };
         invoicePdfLines = validInvoiceItems.map(item => {
           const quantity = Number(item.quantity) || 1;
           const amount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
           return {
-            description: asText(item.service_name, 140),
+            description: invoiceItemName(item),
             quantity,
             amount,
             unitAmount: amount / quantity,
-            details: detailsFor(item).map(detail => `${detail.label}: ${detail.value}${detail.optionPrice > 0 ? ` (+ ${currency(detail.optionPrice)} per item)` : ''}`),
           };
         });
         itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
           const amount = item.confirmed_amount ?? item.estimated_amount;
-          const details = detailsFor(item);
-          const detailHtml = details.map(detail => `<div style="margin-top:4px;color:#64748b;font-size:12px"><strong>${esc(detail.label)}:</strong> ${esc(detail.value)}${detail.optionPrice > 0 ? ` <span style="color:#183db7">(+ ${currency(detail.optionPrice)} per item)</span>` : ''}</div>`).join('');
-          textItems += `${Number(item.quantity) || 1} × ${asText(item.service_name, 140)} — ${currency(amount)}\n${details.map(detail => `  ${detail.label}: ${detail.value}${detail.optionPrice > 0 ? ` (+ ${currency(detail.optionPrice)} per item)` : ''}`).join('\n')}\n`;
-          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(asText(item.service_name, 140))}</strong>${detailHtml}</td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${Number(item.quantity) || 1}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
+          const quantity = Number(item.quantity) || 1;
+          const itemName = invoiceItemName(item);
+          textItems += `${itemName} × ${quantity} — ${currency(amount)}\n`;
+          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(itemName)}</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${quantity}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
         }).join('');
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
@@ -360,7 +342,7 @@ Deno.serve(async (request) => {
         tax: Number(invoice.tax || 0),
         total: dueAmount,
         amountPaid: Number(invoice.amount_paid || 0),
-        paymentMethod: invoicePaymentMethod,
+        paymentMethod: invoice.order_id ? 'mpesa' : invoicePaymentMethod,
       });
       const invoiceFilename = `${asText(invoice.invoice_number, 80).replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`;
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';

@@ -10,14 +10,13 @@ const SLATE = [0.31, 0.37, 0.47];
 const PALE = [0.94, 0.96, 0.99];
 const WATERMARK = [0.955, 0.962, 0.976];
 const SITE_URL = 'https://nexxacrafts.co.ke';
-export const PAYMENT_PDF_DESIGN_VERSION = 3;
+export const PAYMENT_PDF_DESIGN_VERSION = 4;
 
 export interface PaymentPdfLine {
   description: string;
   quantity: number;
   amount: number;
   unitAmount?: number;
-  details?: string[];
 }
 
 export interface PaymentPdfDocument {
@@ -146,7 +145,7 @@ function beginPage(document: PaymentPdfDocument, first: boolean, pageNumber: num
     text(document.kind === 'invoice' ? 'DUE DATE' : 'PAYMENT METHOD', 53, metaY, 7, 'F2', SLATE);
     text(document.kind === 'invoice' ? (document.dueDate || 'As agreed') : (document.paymentMethod || 'Confirmed').toUpperCase(), 53, metaY - 14, 9, 'F2', NAVY);
     if (document.kind === 'receipt') {
-      text('TRANSACTION REFERENCE', 315, metaY, 7, 'F2', SLATE);
+      text('PAYMENT REFERENCE', 315, metaY, 7, 'F2', SLATE);
       text(document.transactionReference || 'Confirmed', 315, metaY - 14, 8, 'F2', NAVY);
     }
     line(42, 546, 553, 546, [0.86, 0.89, 0.94]);
@@ -288,18 +287,12 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
 
   for (const item of document.lines) {
     const descriptionLines = wrap(item.description, 58);
-    const detailLines = (item.details || []).flatMap(detail => wrap(detail, 72));
-    const rowHeight = Math.max(28, descriptionLines.length * 11 + detailLines.length * 9 + 10);
+    const rowHeight = Math.max(28, descriptionLines.length * 11 + 10);
     if (current.y - rowHeight < 150) addPage();
     const yTop = current.y;
     current.canvas.rect(42, yTop - rowHeight + 5, 511, rowHeight, rowIndex % 2 ? [1, 1, 1] : [0.972, 0.979, 0.992]);
     current.canvas.text(descriptionLines[0], 53, yTop - 8, 8, 'F2', NAVY);
     descriptionLines.slice(1).forEach((line, index) => current.canvas.text(line, 53, yTop - 19 - index * 10, 7.5, 'F1', NAVY));
-    let detailY = yTop - 10 - descriptionLines.length * 10;
-    detailLines.forEach(detail => {
-      current.canvas.text(detail, 53, detailY, 7, 'F1', SLATE);
-      detailY -= 9;
-    });
     current.canvas.rightText(String(item.quantity || 1), 453, yTop - 9, 8, 'F1', NAVY);
     current.canvas.rightText(money(item.amount), 542, yTop - 9, 8, 'F2', NAVY);
     current.canvas.line(42, yTop - rowHeight + 5, 553, yTop - rowHeight + 5, [0.88, 0.91, 0.95], 0.45);
@@ -333,7 +326,6 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
     current.canvas.rect(42, totalTop - 57, 3, 29, BLUE);
     current.canvas.text('BALANCE DUE', 54, totalTop - 47, 8, 'F2', NAVY);
     current.canvas.rightText(money(document.balanceDue ?? 0), 540, totalTop - 47, 11, 'F2', BLUE);
-    current.canvas.text(`Payment method: ${(document.paymentMethod || 'Confirmed').toUpperCase()}`, 53, totalTop - 77, 7, 'F1', SLATE);
   }
 
   // Signature block: Times italic gives a script-like signature appearance while remaining font-safe in PDF viewers.
