@@ -257,6 +257,7 @@ export interface PaymentRow {
   recorded_by: string | null;
   confirmed_at: string | null;
   receipt_sent_at: string | null;
+  receipt_whatsapp_sent_at: string | null;
   failure_reason: string | null;
   created_at: string;
 }

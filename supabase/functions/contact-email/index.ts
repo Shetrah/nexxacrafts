@@ -1,3 +1,5 @@
+import { createPaymentPdf, pdfBase64, uploadPaymentPdf, PAYMENT_PDF_DESIGN_VERSION, type PaymentPdfLine } from '../_shared/payment-pdf.ts';
+
 const allowedOrigins = new Set([
   'https://nexxacrafts.co.ke',
   'https://www.nexxacrafts.co.ke',
@@ -24,54 +26,6 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 }[character] ?? character));
 
 const asText = (value: unknown, maxLength: number) => typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
-
-async function sendOrderWhatsApp(input: Record<string, unknown>) {
-  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-  const apiKey = Deno.env.get('TWILIO_API_KEY');
-  const apiSecret = Deno.env.get('TWILIO_API_SECRET');
-  const from = Deno.env.get('TWILIO_WHATSAPP_FROM');
-  const to = Deno.env.get('TWILIO_WHATSAPP_TO');
-  const contentSid = Deno.env.get('TWILIO_WHATSAPP_CONTENT_SID');
-  if (!accountSid || !apiKey || !apiSecret || !from || !to) {
-    console.error('Twilio WhatsApp credentials or sender/recipient are not configured.');
-    return false;
-  }
-
-  const items = Array.isArray(input.items) ? input.items.slice(0, 20) : [];
-  const lines = items.map((item) => {
-    const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-    return `• ${asText(row.serviceName, 120)} × ${Number(row.quantity) || 1}`;
-  });
-  const message = [
-    `New NexxaCraft order: ${asText(input.reference, 60)}`,
-    `Name: ${asText(input.name, 120)}`,
-    `Phone: ${asText(input.phone, 40)}`,
-    `Email: ${asText(input.email, 254)}`,
-    `Payment: ${asText(input.paymentMethod, 30)}`,
-    `Delivery: ${asText(input.deliveryMethod, 40)}`,
-    ...lines,
-    `Notes: ${asText(input.notes, 500) || 'None'}`,
-  ].join('\n').slice(0, 1500);
-
-  const form = new URLSearchParams({ From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`, To: to.startsWith('whatsapp:') ? to : `whatsapp:${to}` });
-  if (contentSid) {
-    form.set('ContentSid', contentSid);
-    form.set('ContentVariables', JSON.stringify({ '1': asText(input.reference, 60), '2': asText(input.name, 120), '3': asText(input.phone, 40), '4': lines.join(', ').slice(0, 500) || 'No item details' }));
-  } else {
-    form.set('Body', message);
-  }
-  const auth = btoa(`${apiKey}:${apiSecret}`);
-  const sent = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
-  });
-  if (!sent.ok) {
-    console.error('Twilio rejected the order WhatsApp notification', sent.status, (await sent.text()).slice(0, 1000));
-    return false;
-  }
-  return true;
-}
 
 function buildCustomerOrderEmail(order: Record<string, unknown>, items: Array<Record<string, unknown>>) {
   const esc = (value: unknown) => escapeHtml(asText(value, 500));
@@ -262,7 +216,8 @@ Deno.serve(async (request) => {
       if (!saved.ok) throw new Error(`Client was emailed, but invoice status update failed (${saved.status}).`);
       return json({ok:true,revoked:true,orderDeleted:false},200,origin);
     } catch (error) { return json({error:error instanceof Error?error.message:'Could not revoke invoice.'},500,origin); }
-  }  const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
+  }
+  const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
     ? 'invoice'
     : payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';
   if (kind === 'invoice') {
@@ -273,24 +228,18 @@ Deno.serve(async (request) => {
     const resendKey = Deno.env.get('RESEND_API_KEY');
     const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
     const whatsappApiKey = Deno.env.get('WHATSAPP_API_KEY');
-    // The order action calls this function server-to-server after it has already
-    // verified the signed-in customer and created their invoice. Use the service
-    // key as an internal proof so this second hop doesn't depend on forwarding a
-    // short-lived browser JWT. This header is never exposed to the client.
-    const internalCheckout = payload.kind === 'checkout_invoice' && Boolean(serviceKey) && request.headers.get('x-nexxacraft-internal') === serviceKey;
-    if (!supabaseUrl || !anonKey || !serviceKey || (!authorization && !internalCheckout)) return json({ error: 'Sign in is required to send an invoice.' }, 401, origin);
+    if (!supabaseUrl || !anonKey || !serviceKey || !authorization) return json({ error: 'Sign in is required to send an invoice.' }, 401, origin);
     let authUser: { id?: string } | null = null;
-    if (!internalCheckout) {
-      try {
-        const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization! } });
-        if (!authResponse.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
-        authUser = await authResponse.json();
-      } catch { return json({ error: 'Your staff session could not be verified.' }, 401, origin); }
-      if (!authUser?.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
-    }
+    try {
+      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
+      if (!authResponse.ok) return json({ error: 'Your customer session could not be verified. Please sign in again and retry invoice delivery.' }, 401, origin);
+      authUser = await authResponse.json();
+    } catch { return json({ error: 'Your customer session could not be verified. Please sign in again and retry invoice delivery.' }, 401, origin); }
+    if (!authUser?.id) return json({ error: 'Your customer session could not be verified. Please sign in again and retry invoice delivery.' }, 401, origin);
+    try {
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
-      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at,whatsapp_sent_at', id: `eq.${invoiceId}` });
+      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at,whatsapp_sent_at,email_pdf_version,whatsapp_pdf_version', id: `eq.${invoiceId}` });
       const invoiceResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
       if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}).`);
       const invoices = await invoiceResponse.json();
@@ -298,17 +247,23 @@ Deno.serve(async (request) => {
       if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
       if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
       let invoicePhone = '';
+      let invoicePaymentMethod = '';
+      let invoiceOrderReference = '';
       if (invoice.order_id) {
-        const orderQuery = new URLSearchParams({ select: 'id,customer_id,customer_email,customer_phone', id: `eq.${invoice.order_id}`, limit: '1' });
+        const orderQuery = new URLSearchParams({ select: 'id,customer_id,customer_email,customer_phone,payment_method,reference', id: `eq.${invoice.order_id}`, limit: '1' });
         const orderResponse = await fetch(`${supabaseUrl}/rest/v1/orders?${orderQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         const orderRows = orderResponse.ok ? await orderResponse.json() : [];
         const order = Array.isArray(orderRows) ? orderRows[0] : null;
         if (!order) return json({ error: 'The invoice order could not be verified.' }, 403, origin);
-        if (payload.kind === 'checkout_invoice' && !internalCheckout && order.customer_id !== authUser?.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
+        if (payload.kind === 'checkout_invoice' && order.customer_id !== authUser?.id) return json({ error: 'This invoice does not belong to your account.' }, 403, origin);
         if (asText(order.customer_email, 254).toLowerCase() !== asText(invoice.customer_email, 254).toLowerCase()) return json({ error: 'The invoice recipient does not match the saved order.' }, 403, origin);
         invoicePhone = asText(order.customer_phone, 40);
+        invoicePaymentMethod = asText(order.payment_method, 40);
+        invoiceOrderReference = asText(order.reference, 60);
       }
-      if (payload.kind === 'checkout_invoice' && invoice.sent_at && invoice.whatsapp_sent_at) return json({ ok: true, invoiceEmailSent: true, whatsappInvoiceSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
+      const emailPdfCurrent = Number(invoice.email_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
+      const whatsappPdfCurrent = Number(invoice.whatsapp_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
+      if (payload.kind === 'checkout_invoice' && invoice.sent_at && invoice.whatsapp_sent_at && emailPdfCurrent && whatsappPdfCurrent) return json({ ok: true, invoiceEmailSent: true, whatsappInvoiceSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
       const recipient = asText(invoice.customer_email, 254);
       const validRecipient = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
       const emailConfigured = Boolean(resendKey && fromEmail && validRecipient);
@@ -322,6 +277,7 @@ Deno.serve(async (request) => {
       };
       let itemRows = '';
       let textItems = '';
+      let invoicePdfLines: PaymentPdfLine[] = [];
       if (invoice.order_id) {
         const itemsQuery = new URLSearchParams({ select: 'service_slug,service_name,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
         const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
@@ -355,6 +311,17 @@ Deno.serve(async (request) => {
             return [{ label, value, optionPrice: Number.isFinite(optionPrice) ? optionPrice : 0 }];
           });
         };
+        invoicePdfLines = validInvoiceItems.map(item => {
+          const quantity = Number(item.quantity) || 1;
+          const amount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+          return {
+            description: asText(item.service_name, 140),
+            quantity,
+            amount,
+            unitAmount: amount / quantity,
+            details: detailsFor(item).map(detail => `${detail.label}: ${detail.value}${detail.optionPrice > 0 ? ` (+ ${currency(detail.optionPrice)} per item)` : ''}`),
+          };
+        });
         itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
           const amount = item.confirmed_amount ?? item.estimated_amount;
           const details = detailsFor(item);
@@ -380,14 +347,30 @@ Deno.serve(async (request) => {
       const payText = paymentUrl ? `\nPay securely by M-Pesa: ${paymentUrl}` : '';
       const trackingText = trackingUrl ? `\nTrack your order status: ${trackingUrl}` : '';
       const text = `NexxaCraft invoice ${invoice.invoice_number}\nBill to: ${invoice.customer_name}\nDue: ${dueDate}\n\n${textItems || 'Please contact our team if you need the itemized breakdown.'}\nSubtotal: ${currency(invoice.subtotal)}\nTax: ${currency(invoice.tax)}\nTotal due: ${currency(dueAmount)}${payText}${trackingText}\n\nThank you for choosing NexxaCraft.`;
+      const invoicePdf = await createPaymentPdf({
+        kind: 'invoice',
+        number: asText(invoice.invoice_number, 80),
+        orderReference: invoiceOrderReference,
+        customerName: asText(invoice.customer_name, 120),
+        customerEmail: asText(invoice.customer_email, 254),
+        date: new Date(String(invoice.issued_at || new Date().toISOString())).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' }),
+        dueDate,
+        lines: invoicePdfLines,
+        subtotal: Number(invoice.subtotal || 0),
+        tax: Number(invoice.tax || 0),
+        total: dueAmount,
+        amountPaid: Number(invoice.amount_paid || 0),
+        paymentMethod: invoicePaymentMethod,
+      });
+      const invoiceFilename = `${asText(invoice.invoice_number, 80).replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`;
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
       const trackingButton = trackingUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(trackingUrl)}" style="display:inline-block;border:1px solid #ccd7eb;border-radius:9px;padding:12px 20px;color:#183db7;text-decoration:none;font-size:14px;font-weight:700">Track your order status</a><p style="font-size:11px;color:#76839a">Use your order reference to check progress any time.</p></td></tr>` : '';
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
-      let invoiceEmailSent = Boolean(invoice.sent_at && payload.kind === 'checkout_invoice');
+      let invoiceEmailSent = Boolean(invoice.sent_at && payload.kind === 'checkout_invoice' && emailPdfCurrent);
       let invoiceEmailError = '';
       if (validRecipient && !invoiceEmailSent && emailConfigured) {
         try {
-          const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html }) });
+          const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Invoice ${invoice.invoice_number} · NexxaCraft`, text, html, attachments: [{ filename: invoiceFilename, content: pdfBase64(invoicePdf) }] }) });
           if (!sent.ok) {
             const details = (await sent.text()).slice(0, 1000);
             invoiceEmailError = `Email provider rejected delivery (${sent.status}). ${details}`;
@@ -395,7 +378,7 @@ Deno.serve(async (request) => {
           } else {
             const emailResult = await sent.json().catch(() => null);
             invoiceEmailSent = true;
-            const markResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ sent_at: new Date().toISOString() }) });
+            const markResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ sent_at: new Date().toISOString(), email_pdf_version: PAYMENT_PDF_DESIGN_VERSION }) });
             if (!markResponse.ok) console.error('Invoice email accepted but sent_at could not be saved', markResponse.status, (await markResponse.text()).slice(0, 500));
             console.log('Resend accepted invoice email', { emailId: emailResult?.id ?? 'unknown', invoiceNumber: invoice.invoice_number, recipient });
           }
@@ -404,14 +387,16 @@ Deno.serve(async (request) => {
         invoiceEmailError = 'Email service is not configured; WhatsApp delivery will be attempted.';
       }
 
-      let whatsappInvoiceSent = Boolean(invoice.whatsapp_sent_at && payload.kind === 'checkout_invoice');
+      let whatsappInvoiceSent = Boolean(invoice.whatsapp_sent_at && payload.kind === 'checkout_invoice' && whatsappPdfCurrent);
       let whatsappInvoiceError = whatsappInvoiceSent ? '' : whatsappApiKey ? '' : 'WhatsApp delivery is not configured. Set WHATSAPP_API_KEY in Supabase Edge Function secrets.';
       if (whatsappApiKey && invoicePhone && !whatsappInvoiceSent) {
         const digits = invoicePhone.replace(/\D/g, '');
         const to = digits.startsWith('0') && digits.length === 10 ? `254${digits.slice(1)}` : digits.startsWith('254') ? digits : digits.length === 9 ? `254${digits}` : '';
         if (to) {
           try {
-            const whatsappResponse = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/send', { method: 'POST', headers: { 'X-API-Key': whatsappApiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, message: `${text}\n\nPay this invoice online: ${paymentUrl || siteUrl}` }) });
+            const invoicePdfUrl = await uploadPaymentPdf(supabaseUrl, serviceKey, `invoices/${invoiceId}.pdf`, invoicePdf);
+            const caption = `NexxaCraft invoice ${asText(invoice.invoice_number, 80)} for ${asText(invoice.customer_name, 120)}. Amount due: ${currency(dueAmount)}.${paymentUrl ? ` Pay securely: ${paymentUrl}` : ''}${trackingUrl ? ` Track order: ${trackingUrl}` : ''}`;
+            const whatsappResponse = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/media', { method: 'POST', headers: { 'X-API-Key': whatsappApiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, mimetype: 'application/pdf', mediaUrl: invoicePdfUrl, caption, fileName: invoiceFilename }) });
             const whatsappBodyText = await whatsappResponse.text();
             let whatsappBody: Record<string, unknown> = {};
             try { whatsappBody = JSON.parse(whatsappBodyText) as Record<string, unknown>; } catch { /* preserve provider status in the error */ }
@@ -420,7 +405,7 @@ Deno.serve(async (request) => {
               console.error(whatsappInvoiceError);
             } else {
               whatsappInvoiceSent = true;
-              const savedWhatsApp = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ whatsapp_sent_at: new Date().toISOString() }) });
+              const savedWhatsApp = await fetch(`${supabaseUrl}/rest/v1/invoices?id=eq.${invoiceId}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ whatsapp_sent_at: new Date().toISOString(), whatsapp_pdf_version: PAYMENT_PDF_DESIGN_VERSION }) });
               if (!savedWhatsApp.ok) console.error('WhatsApp accepted invoice but whatsapp_sent_at could not be saved', savedWhatsApp.status, (await savedWhatsApp.text()).slice(0, 400));
             }
           } catch (error) { whatsappInvoiceError = error instanceof Error ? error.message : 'WhatsApp invoice delivery failed.'; }
@@ -504,7 +489,7 @@ Deno.serve(async (request) => {
             const linkResponse = await fetch(`${supabaseUrl}/rest/v1/payments?id=eq.${payment.id}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ invoice_id: invoice.id, amount: savedOrder.total, provider: 'payhero' }) });
             if (!linkResponse.ok) throw new Error(`Invoice payment link failed (${linkResponse.status}).`);
           }
-          const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${serviceKey}`, 'x-nexxacraft-internal': serviceKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
+      const invoiceEmail = await fetch(`${supabaseUrl}/functions/v1/contact-email`, { method: 'POST', headers: { apikey: anonKey, Authorization: authorization!, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'checkout_invoice', invoiceId: invoice.id }) });
           const invoiceDelivery = await invoiceEmail.json().catch(() => ({}));
           invoiceEmailSent = invoiceEmail.ok && invoiceDelivery.invoiceEmailSent === true;
           invoiceWhatsappSent = invoiceEmail.ok && invoiceDelivery.whatsappInvoiceSent === true;
@@ -522,11 +507,7 @@ Deno.serve(async (request) => {
       }
       try { emailSent = await sendCustomerOrderEmail(savedOrder, validItems); }
       catch (error) { console.error('Could not send customer order email', error); }
-      let whatsappSent = false;
-      try {
-        whatsappSent = await sendOrderWhatsApp({ ...order, name: savedOrder.customer_name, email: savedOrder.customer_email, phone: savedOrder.customer_phone, reference: savedOrder.reference, items: validItems });
-      } catch (error) { console.error('Could not send the order WhatsApp notification', error); }
-      return json({ ok: true, notificationSent: whatsappSent, customerEmailSent: emailSent, invoiceEmailSent, invoiceWhatsappSent, invoiceEmailError, invoiceWhatsappError }, 200, origin);
+      return json({ ok: true, customerEmailSent: emailSent, invoiceEmailSent, invoiceWhatsappSent, invoiceEmailError, invoiceWhatsappError }, 200, origin);
     } catch (error) {
       console.error('Could not send customer order confirmation', error);
       return json({ ok: true, notificationSent: false, customerEmailSent: false }, 200, origin);

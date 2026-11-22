@@ -5,7 +5,7 @@ import { useCatalog } from '@/context/CatalogContext';
 import { supabase } from '@/lib/supabase';
 import './chat-assistant.css';
 
-type ChatMessage = { id: string; role: 'assistant' | 'user'; text: string; serviceSlug?: string; kind?: 'voice' };
+type ChatMessage = { id: string; role: 'assistant' | 'user'; text: string; serviceSlug?: string; imageServiceSlug?: string; kind?: 'voice' };
 const HISTORY_KEY = 'nexxacrafts-support-chat-v2';
 const WELCOME_VOICE = 'Welcome to NexxaCraft. I’m Levine from the customer support team. I’m here to help you find the right design, print, or digital service. Open the chat whenever you’re ready.';
 const GREETING = "Hello, I'm Levine from NexxaCraft customer support. Tell me what you have in mind and I’ll help you find the right service, understand the next steps, and get to the right order form.";
@@ -19,20 +19,22 @@ function readMessages(): ChatMessage[] {
   return [{ id: 'welcome', role: 'assistant', text: GREETING }];
 }
 
-function speak(text: string, onStart?: () => void) {
-  if (!('speechSynthesis' in window)) return false;
+function speak(text: string, onStart?: () => void, onEnd?: () => void) {
+  if (!('speechSynthesis' in window)) return null;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-KE';
   utterance.rate = 0.94;
   utterance.pitch = 1.08;
   utterance.onstart = () => onStart?.();
+  utterance.onend = () => onEnd?.();
+  utterance.onerror = () => onEnd?.();
   const voices = window.speechSynthesis.getVoices();
   const preferred = voices.find(voice => /female|zira|samantha|aria|jenny|google uk english/i.test(voice.name))
     ?? voices.find(voice => /^en(-|_)(KE|GB|US)/i.test(voice.lang));
   if (preferred) utterance.voice = preferred;
   window.speechSynthesis.speak(utterance);
-  return true;
+  return utterance;
 }
 
 function formatVoiceDuration(seconds: number) {
@@ -78,9 +80,11 @@ export default function ChatAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(readMessages);
   const [draft, setDraft] = useState('');
+  const [placeholder, setPlaceholder] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [voiceOn, setVoiceOn] = useState(true);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
   const [recording, setRecording] = useState(false);
   const [cancelRecording, setCancelRecording] = useState(false);
@@ -99,10 +103,59 @@ export default function ChatAssistant() {
   const recordingTimerRef = useRef<number | null>(null);
   const serviceBySlug = useMemo(() => new Map(services.map(service => [service.slug, service])), [services]);
 
+  function toggleSpeech(text: string, messageId: string) {
+    if (!('speechSynthesis' in window)) return;
+    if (speakingMessageId === messageId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+    setSpeakingMessageId(messageId);
+    const utterance = speak(text, undefined, () => setSpeakingMessageId(current => current === messageId ? null : current));
+    if (!utterance) setSpeakingMessageId(null);
+  }
+
+  function toggleAutomaticVoice() {
+    if (voiceOn && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+    }
+    setVoiceOn(!voiceOn);
+  }
+
   useEffect(() => {
     try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-16))); } catch { /* Chat still works without storage. */ }
   }, [messages]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
+  useEffect(() => {
+    if (draft) { setPlaceholder(''); return; }
+    const suggestions = [
+      'Ask Levine about a service…',
+      'Need help choosing a print option?…',
+      'Ask about pricing or your order…',
+    ];
+    let phraseIndex = 0;
+    let characterIndex = 0;
+    let deleting = false;
+    let timer = 0;
+    const step = () => {
+      const phrase = suggestions[phraseIndex];
+      characterIndex += deleting ? -1 : 1;
+      setPlaceholder(phrase.slice(0, characterIndex));
+      let delay = deleting ? 34 : 72;
+      if (!deleting && characterIndex >= phrase.length) {
+        deleting = true;
+        delay = 1350;
+      } else if (deleting && characterIndex <= 0) {
+        deleting = false;
+        phraseIndex = (phraseIndex + 1) % suggestions.length;
+        delay = 300;
+      }
+      timer = window.setTimeout(step, delay);
+    };
+    timer = window.setTimeout(step, 450);
+    return () => window.clearTimeout(timer);
+  }, [draft]);
   useEffect(() => {
     if (location.pathname !== '/' || welcomeHandledRef.current) return;
     welcomeHandledRef.current = true;
@@ -111,19 +164,6 @@ export default function ChatAssistant() {
     if (seen) return;
     try { localStorage.setItem('nexxacrafts-first-visit-welcome-v2', '1'); } catch { /* Mark this visit in component state. */ }
     setMessages(current => current.some(message => message.id === 'welcome') ? current : [{ id: 'welcome', role: 'assistant', text: GREETING }, ...current]);
-    if (!voiceOn) return;
-    let speechStarted = false;
-    const onFirstInteraction = () => {
-      window.removeEventListener('pointerdown', onFirstInteraction);
-      window.removeEventListener('keydown', onFirstInteraction);
-      if (!speechStarted) speak(WELCOME_VOICE, () => { speechStarted = true; });
-    };
-    try { speak(WELCOME_VOICE, () => { speechStarted = true; window.removeEventListener('pointerdown', onFirstInteraction); window.removeEventListener('keydown', onFirstInteraction); }); }
-    catch { /* Browser audio settings may block automatic speech on page load. */ }
-    // If autoplay is blocked, retry on the visitor's first interaction.
-    window.addEventListener('pointerdown', onFirstInteraction, { once: true });
-    window.addEventListener('keydown', onFirstInteraction, { once: true });
-    return () => { window.removeEventListener('pointerdown', onFirstInteraction); window.removeEventListener('keydown', onFirstInteraction); };
   }, [location.pathname]);
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -179,7 +219,7 @@ export default function ChatAssistant() {
           if (event.error) throw new Error(event.error);
           if (event.text) {
             fullText += event.text;
-            setMessages(current => current.map(message => message.id === assistantId ? { ...message, text: fullText.replace(/\[\[SERVICE:[a-z0-9-]*$/i, '') } : message));
+            setMessages(current => current.map(message => message.id === assistantId ? { ...message, text: fullText.replace(/\[\[(?:SERVICE|IMAGE):[a-z0-9-]*$/i, '') } : message));
           }
         } catch (parseError) { if (parseError instanceof Error && parseError.message !== 'Unexpected end of JSON input') throw parseError; }
       };
@@ -194,8 +234,10 @@ export default function ChatAssistant() {
       if (buffer.trim()) handleFrame(buffer);
       if (!fullText.trim()) throw new Error('No reply came through. Please try again.');
       const serviceSlug = findSuggestedService(fullText, services);
-      const cleanText = fullText.replace(/\s*\[\[SERVICE:[a-z0-9-]+\]\]\s*/gi, '').trim();
-      setMessages(current => current.map(message => message.id === assistantId ? { ...message, text: cleanText, serviceSlug } : message));
+      const imageServiceSlug = fullText.match(/\[\[IMAGE:([a-z0-9-]+)\]\]/i)?.[1];
+      const cleanText = fullText.replace(/\s*\[\[(?:SERVICE|IMAGE):[a-z0-9-]+\]\]\s*/gi, '').trim();
+      setMessages(current => current.map(message => message.id === assistantId ? { ...message, text: cleanText, serviceSlug, ...(imageServiceSlug && serviceBySlug.has(imageServiceSlug) ? { imageServiceSlug } : {}) } : message));
+      if (voiceOn && cleanText) toggleSpeech(cleanText, assistantId);
     } catch (sendError) {
       if (sendError instanceof DOMException && sendError.name === 'AbortError') return;
       const message = sendError instanceof Error ? sendError.message : 'Customer support chat is temporarily unavailable.';
@@ -287,18 +329,18 @@ export default function ChatAssistant() {
 
   return <div className="nc-chat-widget">
     {open && <section className="nc-chat-panel" aria-label="NexxaCraft customer support chat" aria-modal="false">
-      <header className="nc-chat-header"><div className="nc-chat-brand"><div className="nc-chat-avatar"><Headphones size={19}/></div><div><strong>NexxaCraft customer support</strong><span><i/> Here to help · usually replies quickly</span></div></div><div className="nc-chat-head-actions"><button type="button" aria-label={voiceOn ? 'Turn voice off' : 'Turn voice on'} title={voiceOn ? 'Voice on' : 'Voice off'} onClick={() => setVoiceOn(value => !value)}>{voiceOn ? <Volume2 size={17}/> : <VolumeX size={17}/>}</button><button type="button" aria-label="New conversation" title="New conversation" onClick={resetChat}><Plus size={18}/></button><button type="button" aria-label="Minimize chat" title="Minimize" onClick={() => setOpen(false)}><ChevronDown size={19}/></button></div></header>
+      <header className="nc-chat-header"><div className="nc-chat-brand"><div className="nc-chat-avatar"><Headphones size={19}/></div><div><strong>NexxaCraft customer support</strong><span><i/> Here to help · usually replies quickly</span></div></div><div className="nc-chat-head-actions"><button type="button" aria-label={voiceOn ? 'Turn automatic voice replies off' : 'Turn automatic voice replies on'} title={voiceOn ? 'Voice replies on' : 'Voice replies off'} onClick={toggleAutomaticVoice}>{voiceOn ? <Volume2 size={17}/> : <VolumeX size={17}/>}</button><button type="button" aria-label="New conversation" title="New conversation" onClick={resetChat}><Plus size={18}/></button><button type="button" aria-label="Minimize chat" title="Minimize" onClick={() => setOpen(false)}><ChevronDown size={19}/></button></div></header>
       <div className="nc-chat-intro"><span className="nc-chat-intro-tag"><Headphones size={13}/> HERE TO HELP</span><h2>What can we help you make?</h2><p>Ask about our services, pricing, files, or how to get started.</p></div>
       <div className="nc-chat-messages" ref={scrollRef} aria-live="polite" aria-relevant="additions text">
-        {messages.map(message => { const service = message.serviceSlug ? serviceBySlug.get(message.serviceSlug) : undefined; return <article key={message.id} className={`nc-chat-message nc-chat-message-${message.role}`}><div className="nc-chat-message-avatar">{message.role === 'assistant' ? <Headphones size={14}/> : <span>You</span>}</div><div className="nc-chat-message-content">{message.kind === 'voice' ? <div className="nc-chat-voice-message"><Mic size={15}/><span className="nc-chat-voice-bars"><i/><i/><i/><i/><i/><i/><i/></span><strong>{message.text.replace('Voice message · ', '')}</strong></div> : <p>{message.text || <span className="nc-chat-caret" aria-label="Levine is replying"/>}</p>}{service&&<button type="button" className="nc-chat-service-card" onClick={()=>{setOpen(false);navigate(`/order/${service.slug}`);}}><span className="nc-chat-service-icon"><ArrowRight size={17}/></span><span><small>RECOMMENDED SERVICE</small><strong>{service.name}</strong><em>Open order form</em></span><ArrowRight size={16}/></button>}{message.id==='welcome'&&voiceOn&&<button type="button" className="nc-chat-hear" onClick={()=>speak(WELCOME_VOICE)}><Volume2 size={13}/> Hear welcome</button>}</div></article>; })}
+        {messages.map(message => { const service = message.serviceSlug ? serviceBySlug.get(message.serviceSlug) : undefined; const imageService = message.imageServiceSlug ? serviceBySlug.get(message.imageServiceSlug) : undefined; return <article key={message.id} className={`nc-chat-message nc-chat-message-${message.role}`}><div className="nc-chat-message-avatar">{message.role === 'assistant' ? <Headphones size={14}/> : <span>You</span>}</div><div className="nc-chat-message-content">{message.kind === 'voice' ? <div className="nc-chat-voice-message"><Mic size={15}/><span className="nc-chat-voice-bars"><i/><i/><i/><i/><i/><i/><i/></span><strong>{message.text.replace('Voice message · ', '')}</strong></div> : <p>{message.text || <span className="nc-chat-caret" aria-label="Levine is replying"/>}</p>}{imageService?.image&&<figure className="nc-chat-shared-image"><img src={imageService.image} alt={`${imageService.name} example`} loading="lazy"/><figcaption>{imageService.name}</figcaption></figure>}{service&&<button type="button" className="nc-chat-service-card" onClick={()=>{setOpen(false);navigate(`/order/${service.slug}`);}}>{service.image&&<img src={service.image} alt="" loading="lazy"/>}<span className="nc-chat-service-copy"><small>RECOMMENDED SERVICE</small><strong>{service.name}</strong><em>Open order form</em></span><ArrowRight size={16}/></button>}{message.role==='assistant'&&message.text&&<button type="button" className="nc-chat-hear" onClick={()=>toggleSpeech(message.text,message.id)}>{speakingMessageId===message.id?<VolumeX size={13}/>:<Volume2 size={13}/>} {speakingMessageId===message.id?'Stop listening':'Listen to reply'}</button>}</div></article>; })}
         {messages.length===1&&!busy&&<div className="nc-chat-quick-prompts">{quickPrompts.map(prompt=><button type="button" key={prompt} onClick={()=>void sendMessage(prompt)}>{prompt}<ArrowRight size={13}/></button>)}</div>}
         {busy&&messages.at(-1)?.text===''&&<div className="nc-chat-thinking"><span/><span/><span/> Finding the right help…</div>}
         {error&&<div className="nc-chat-error" role="alert">{error} {messages.filter(message=>message.role==='user').at(-1)?.kind!=='voice'&&<button type="button" onClick={()=>void sendMessage(messages.filter(message=>message.role==='user').at(-1)?.text||'Can you help me choose a service?')}>Retry</button>}</div>}
       </div>
       {recording&&<div className={`nc-chat-recording-status ${cancelRecording?'is-cancel':''}`}><span className="nc-chat-recording-dot"/><strong>{cancelRecording?'Release to cancel':'Recording voice message'}</strong><span>{formatVoiceDuration(recordingSeconds)}</span><small>{cancelRecording?'Let go to discard':'Slide up to cancel'}</small></div>}
-      {voiceMode ? <div className="nc-chat-compose nc-chat-voice-compose"><button type="button" className="nc-chat-mode-toggle" aria-label="Switch to typing" onClick={()=>setVoiceMode(false)}><Keyboard size={18}/></button><button type="button" className={`nc-chat-ptt ${recording?'is-recording':''} ${cancelRecording?'is-cancel':''}`} disabled={busy} onPointerDown={event=>void beginRecording(event)} onPointerUp={()=>stopRecording(!recordingCancelRef.current)} onPointerMove={moveRecordingPointer} onPointerCancel={()=>stopRecording(false)} aria-label={recording?(cancelRecording?'Release to cancel recording':'Release to send voice message'):'Hold to talk'}>{recording?<><Mic size={17}/>{cancelRecording?'Release to cancel':`Release to send · ${formatVoiceDuration(recordingSeconds)}`}</>:<>Hold to talk <Mic size={17}/></>}</button></div> : <form className="nc-chat-compose" onSubmit={onSubmit}><button type="button" className="nc-chat-mode-toggle" aria-label="Switch to voice recording" onClick={()=>setVoiceMode(true)}><Mic size={18}/></button><label className="sr-only" htmlFor="nc-chat-input">Message NexxaCraft customer support</label><input id="nc-chat-input" ref={inputRef} value={draft} onChange={event=>setDraft(event.target.value)} placeholder="Ask a question…" maxLength={1200} disabled={busy}/><button type="submit" disabled={busy||!draft.trim()} aria-label="Send message">{busy?<Loader2 size={18} className="animate-spin"/>:<Send size={17}/>}</button></form>}
+      {voiceMode ? <div className="nc-chat-compose nc-chat-voice-compose"><button type="button" className="nc-chat-mode-toggle" aria-label="Switch to typing" onClick={()=>setVoiceMode(false)}><Keyboard size={18}/></button><button type="button" className={`nc-chat-ptt ${recording?'is-recording':''} ${cancelRecording?'is-cancel':''}`} disabled={busy} onPointerDown={event=>void beginRecording(event)} onPointerUp={()=>stopRecording(!recordingCancelRef.current)} onPointerMove={moveRecordingPointer} onPointerCancel={()=>stopRecording(false)} aria-label={recording?(cancelRecording?'Release to cancel recording':'Release to send voice message'):'Hold to talk'}>{recording?<><Mic size={17}/>{cancelRecording?'Release to cancel':`Release to send · ${formatVoiceDuration(recordingSeconds)}`}</>:<>Hold to talk <Mic size={17}/></>}</button></div> : <form className="nc-chat-compose" onSubmit={onSubmit}><button type="button" className="nc-chat-mode-toggle" aria-label="Switch to voice recording" onClick={()=>setVoiceMode(true)}><Mic size={18}/></button><label className="sr-only" htmlFor="nc-chat-input">Message NexxaCraft customer support</label><input id="nc-chat-input" ref={inputRef} value={draft} onChange={event=>setDraft(event.target.value)} placeholder={placeholder || 'Ask Levine a question…'} maxLength={1200} disabled={busy}/><button type="submit" disabled={busy||!draft.trim()} aria-label="Send message">{busy?<Loader2 size={18} className="animate-spin"/>:<Send size={17}/>}</button></form>}
       <div className="nc-chat-footer"><span><i/> Secure service guidance</span><button type="button" onClick={()=>navigate('/contact')}><Mic2 size={12}/> Talk to our team</button></div>
     </section>}
-    <button type="button" className={`nc-chat-launcher ${open?'is-open':''}`} onClick={()=>{setOpen(value=>!value);if(!open)window.setTimeout(()=>inputRef.current?.focus(),120);}} aria-label={open?'Close customer support chat':'Chat with NexxaCraft customer support'} aria-expanded={open}>{open?<X size={22}/>:<><span className="nc-chat-launcher-icon"><MessageCircle size={22}/><i/></span><span className="nc-chat-launcher-copy"><strong>Need a hand?</strong><small>Chat with Levine</small></span></>}<span className="nc-chat-launcher-glow"/></button>
+    <button type="button" className={`nc-chat-launcher ${open?'is-open':''}`} onClick={()=>{if(!open){setOpen(true);window.setTimeout(()=>inputRef.current?.focus(),120);if(voiceOn)toggleSpeech(WELCOME_VOICE,'welcome');}else{setOpen(false);if('speechSynthesis'in window)window.speechSynthesis.cancel();setSpeakingMessageId(null);}}} aria-label={open?'Close customer support chat':'Chat with NexxaCraft customer support'} aria-expanded={open}>{open?<X size={22}/>:<><span className="nc-chat-launcher-icon"><MessageCircle size={22}/><i/></span><span className="nc-chat-launcher-copy"><strong>Need a hand?</strong><small>Chat with Levine</small></span></>}<span className="nc-chat-launcher-glow"/></button>
   </div>;
 }

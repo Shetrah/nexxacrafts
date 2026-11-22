@@ -1,3 +1,5 @@
+import { createPaymentPdf, pdfBase64, uploadPaymentPdf, PAYMENT_PDF_DESIGN_VERSION } from '../_shared/payment-pdf.ts';
+
 const origins = new Set([
   'https://nexxacrafts.co.ke',
   'https://www.nexxacrafts.co.ke',
@@ -88,7 +90,7 @@ function payheroAuthorization(): string {
   return '';
 }
 
-async function sendEmail(to: string, subject: string, html: string, plain: string) {
+async function sendEmail(to: string, subject: string, html: string, plain: string, attachments?: Array<{ filename: string; content: string }>) {
   const key = Deno.env.get('RESEND_API_KEY');
   const from = Deno.env.get('RESEND_FROM_EMAIL');
   if (!key || !from || !to) throw new Error('Email delivery is not configured.');
@@ -106,6 +108,7 @@ async function sendEmail(to: string, subject: string, html: string, plain: strin
       subject,
       html,
       text: plain,
+      ...(attachments?.length ? { attachments } : {}),
     }),
   });
 
@@ -224,7 +227,7 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
   // confirmed payment and invoice so a retry can deliver the receipt.
   if (!row) {
     const pq = new URLSearchParams({
-      select: 'id,invoice_id,amount,status,method,provider,transaction_reference,provider_reference',
+      select: 'id,invoice_id,order_id,amount,status,method,provider,transaction_reference,provider_reference',
       id: `eq.${encodeURIComponent(id)}`,
       limit: '1',
     });
@@ -277,34 +280,114 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
   }
 
   if (!row) throw new Error('Could not prepare the payment receipt email.');
+  const paymentDetails = await rest(url, service, `payments?select=order_id,confirmed_at&id=eq.${encodeURIComponent(id)}&limit=1`) as Array<Record<string, unknown>>;
+  const paymentRecord = paymentDetails[0];
+  const orderDetails = paymentRecord?.order_id
+    ? await rest(url, service, `orders?select=reference,customer_phone&id=eq.${encodeURIComponent(String(paymentRecord.order_id))}&limit=1`) as Array<Record<string, unknown>>
+    : [];
+  const orderRecord = orderDetails[0];
 
   const receipt = text(row.transaction_reference, 100);
   const amount = Number(row.payment_amount);
   const balance = Number(row.invoice_total) - Number(row.prior_amount_paid);
+  const amountRemaining = Math.max(0, balance - amount);
+  const emailPdfIsCurrent = Number(row.customer_email_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
+  const whatsappPdfIsCurrent = Number(row.customer_whatsapp_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
   const formatMoney = (v: unknown) =>
     `KES ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const receiptPdf = await createPaymentPdf({
+    kind: 'receipt',
+    number: `RCP-${id.slice(0, 8).toUpperCase()}`,
+    orderReference: text(orderRecord?.reference, 60),
+    customerName: text(row.customer_name, 120),
+    customerEmail: text(row.customer_email, 254),
+    date: paymentRecord?.confirmed_at ? new Date(String(paymentRecord.confirmed_at)).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }) : new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }),
+    lines: [{ description: `Payment for invoice ${text(row.invoice_number, 80)}`, quantity: 1, amount }],
+    total: Number(row.invoice_total),
+    amountPaid: amount,
+    balanceDue: Math.max(0, balance - amount),
+    paymentMethod: text(row.payment_method, 40),
+    transactionReference: receipt || 'Confirmed',
+  });
+  const receiptFilename = `${text(row.invoice_number, 80).replace(/[^a-zA-Z0-9_-]/g, '-')}-receipt.pdf`;
+  const receiptStoragePath = text(row.receipt_pdf_path, 300) || `receipts/${id}.pdf`;
+  let receiptPdfUrl = '';
 
-  if (!row.customer_email_sent_at) {
+  let customerEmailError = text(row.customer_email_error, 300);
+  if (!row.customer_email_sent_at || !emailPdfIsCurrent) {
     const customerEmail = text(row.customer_email, 254);
-    if (!customerEmail) throw new Error('The invoice has no customer email address.');
+    try {
+      if (!customerEmail) throw new Error('The invoice has no customer email address.');
+      await sendEmail(
+        customerEmail,
+        `Payment receipt · ${text(row.invoice_number, 80)}`,
+        emailFrame('Payment receipt', `<h1 style="margin:0 0 12px">Payment received</h1><p>Hello ${esc(row.customer_name)}, your payment has been confirmed.</p><div style="padding:16px;background:#f0f4ff;border-radius:10px"><p>Invoice: <b>${esc(row.invoice_number)}</b></p><p>Amount paid: <b>${formatMoney(amount)}</b></p><p>Receipt: <b>${esc(receipt || 'Confirmed')}</b></p><p>Balance due: <b>${formatMoney(amountRemaining)}</b></p></div><p>Thank you for choosing NexxaCraft.</p>`),
+        `Payment received for invoice ${text(row.invoice_number, 80)}. Amount ${formatMoney(amount)}. Receipt ${receipt}.`,
+        [{ filename: receiptFilename, content: pdfBase64(receiptPdf) }],
+      );
 
-    await sendEmail(
-      customerEmail,
-      `Payment receipt · ${text(row.invoice_number, 80)}`,
-      emailFrame('Payment receipt', `<h1 style="margin:0 0 12px">Payment received</h1><p>Hello ${esc(row.customer_name)}, your payment has been confirmed.</p><div style="padding:16px;background:#f0f4ff;border-radius:10px"><p>Invoice: <b>${esc(row.invoice_number)}</b></p><p>Amount paid: <b>${formatMoney(amount)}</b></p><p>Receipt: <b>${esc(receipt || 'Confirmed')}</b></p><p>Balance due: <b>${formatMoney(balance)}</b></p></div><p>Thank you for choosing NexxaCraft.</p>`),
-      `Payment received for invoice ${text(row.invoice_number, 80)}. Amount ${formatMoney(amount)}. Receipt ${receipt}.`,
-    );
+      const sentAt = new Date().toISOString();
+      await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ customer_email_sent_at: sentAt, customer_email_error: null, customer_email_pdf_version: PAYMENT_PDF_DESIGN_VERSION }),
+      });
+      await rest(url, service, `payments?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ receipt_sent_at: sentAt }),
+      });
+      row.customer_email_sent_at = sentAt;
+      customerEmailError = '';
+    } catch (error) {
+      customerEmailError = error instanceof Error ? error.message : 'Customer receipt email failed.';
+      await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ customer_email_error: customerEmailError.slice(0, 500) }),
+      }).catch(() => {});
+      console.error('Could not send payment receipt email', customerEmailError);
+    }
+  }
 
-    const sentAt = new Date().toISOString();
-    await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ customer_email_sent_at: sentAt }),
-    });
-    await rest(url, service, `payments?id=eq.${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ receipt_sent_at: sentAt }),
-    });
-    row.customer_email_sent_at = sentAt;
+  let customerWhatsappError = text(row.customer_whatsapp_error, 300);
+  if (!row.customer_whatsapp_sent_at || !whatsappPdfIsCurrent) {
+    try {
+      const apiKey = Deno.env.get('WHATSAPP_API_KEY');
+      if (!apiKey) throw new Error('WhatsApp is not configured. Set WHATSAPP_API_KEY in Supabase secrets.');
+      const rawPhone = text(orderRecord?.customer_phone, 40);
+      const digits = rawPhone.replace(/\D/g, '');
+      const to = digits.startsWith('0') && digits.length === 10 ? `254${digits.slice(1)}`
+        : digits.startsWith('254') ? digits
+        : digits.length === 9 ? `254${digits}` : '';
+      if (!to) throw new Error('A valid client WhatsApp number is not saved on this order.');
+      if (!receiptPdfUrl) receiptPdfUrl = await uploadPaymentPdf(url, service, receiptStoragePath, receiptPdf);
+      if (!row.receipt_pdf_path) {
+        await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH', body: JSON.stringify({ receipt_pdf_path: receiptStoragePath }),
+        });
+        row.receipt_pdf_path = receiptStoragePath;
+      }
+      const caption = `Payment received for invoice ${text(row.invoice_number, 80)}.\nAmount received: ${formatMoney(amount)}\nReceipt: ${receipt || 'Confirmed'}\nBalance remaining: ${formatMoney(amountRemaining)}\nThank you for choosing NexxaCraft.`;
+      const response = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/media', {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, mimetype: 'application/pdf', mediaUrl: receiptPdfUrl, caption, fileName: receiptFilename }),
+      });
+      const responseText = await response.text();
+      let result: Record<string, unknown> = {};
+      try { result = JSON.parse(responseText) as Record<string, unknown>; } catch { /* include provider status below */ }
+      if (!response.ok || result.success !== true) throw new Error(`WhatsApp provider rejected receipt (${response.status}): ${text(result.message || result.error || responseText, 240)}`);
+      const sentAt = new Date().toISOString();
+      await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ customer_whatsapp_sent_at: sentAt, customer_whatsapp_error: null, customer_whatsapp_pdf_version: PAYMENT_PDF_DESIGN_VERSION }),
+      });
+      await rest(url, service, `payments?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ receipt_whatsapp_sent_at: sentAt }),
+      });
+      row.customer_whatsapp_sent_at = sentAt;
+      customerWhatsappError = '';
+    } catch (error) {
+      customerWhatsappError = error instanceof Error ? error.message : 'WhatsApp receipt delivery failed.';
+      await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ customer_whatsapp_error: customerWhatsappError.slice(0, 500) }),
+      }).catch(() => {});
+      console.error('Could not send payment receipt through WhatsApp', customerWhatsappError);
+    }
   }
 
   if (!row.admin_email_sent_at) {
@@ -326,6 +409,9 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
 
   return {
     customerEmailSent: Boolean(row.customer_email_sent_at),
+    customerEmailError: customerEmailError || undefined,
+    customerWhatsappSent: Boolean(row.customer_whatsapp_sent_at),
+    customerWhatsappError: customerWhatsappError || undefined,
     adminEmailSent: Boolean(row.admin_email_sent_at),
     customerEmail: text(row.customer_email, 254),
   };
@@ -642,8 +728,9 @@ Deno.serve(async req => {
         console.error('Admin dashboard notification retry failed', e);
       }
       const delivery = await deliverPendingEmails(url, service, paymentId);
-      if (!delivery.customerEmailSent) {
-        throw new Error('Resend did not confirm acceptance of the customer receipt email.');
+      if (!delivery.customerEmailSent || !delivery.customerWhatsappSent) {
+        const failures = [delivery.customerEmailError, delivery.customerWhatsappError].filter(Boolean).join(' ');
+        return json({ ok: false, ...delivery, error: failures || 'Receipt delivery was not accepted by both email and WhatsApp.' }, 502, origin);
       }
       return json({ ok: true, ...delivery }, 200, origin);
     } catch (e) {
@@ -701,7 +788,7 @@ Deno.serve(async req => {
 
     try {
       const query = new URLSearchParams({
-        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,created_at',
+        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,receipt_whatsapp_sent_at,created_at',
         invoice_id: `eq.${invoiceId}`,
         provider: 'eq.payhero',
         order: 'created_at.desc',
@@ -860,6 +947,7 @@ Deno.serve(async req => {
           transaction_reference: payment.transaction_reference,
           confirmed_at: payment.confirmed_at,
           receipt_sent_at: payment.receipt_sent_at,
+          receipt_whatsapp_sent_at: payment.receipt_whatsapp_sent_at,
         },
       }, 200, origin);
     } catch (e) {

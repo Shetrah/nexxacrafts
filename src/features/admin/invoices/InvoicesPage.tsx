@@ -105,8 +105,8 @@ export default function InvoicesPage() {
         throw new Error(body?.error || invokeError.message || 'Payment was recorded, but receipt email failed. Deploy payhero-payments.');
       }
       if (data?.error) throw new Error(data.error);
-      if (data?.customerEmailSent !== true) throw new Error('Payment was recorded, but Resend did not confirm acceptance of the client receipt email. Retry the receipt from the Payments page.');
-      setNotice(`Invoice ${invoice.invoice_number} marked paid; Resend accepted the receipt email for ${data.customerEmail || invoice.customer_email || 'the client'}.`);
+      if (data?.customerEmailSent !== true || data?.customerWhatsappSent !== true) throw new Error(data?.error || 'Payment was recorded, but both receipt email and WhatsApp delivery were not confirmed. Retry delivery from the Payments page.');
+      setNotice(`Invoice ${invoice.invoice_number} marked paid; the PDF receipt was accepted by Resend and WhatsApp for ${data.customerEmail || invoice.customer_email || 'the client'}.`);
       await reload();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not record payment and send receipt.'); }
     finally { setActionId(''); await reload(); }

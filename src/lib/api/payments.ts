@@ -6,7 +6,7 @@ import type { PaymentRecordStatus, PaymentRow } from '@/types/db';
 import { columnsOf, expectRows, getClient, newestFirst, selectByIds } from './client';
 
 const PAYMENT_COLUMNS = columnsOf<PaymentRow>()(
-  'id, order_id, invoice_id, method, amount, currency, status, provider, provider_reference, transaction_reference, recorded_by, confirmed_at, receipt_sent_at, failure_reason, created_at',
+  'id, order_id, invoice_id, method, amount, currency, status, provider, provider_reference, transaction_reference, recorded_by, confirmed_at, receipt_sent_at, receipt_whatsapp_sent_at, failure_reason, created_at',
 );
 
 export interface ListPaymentsOptions {
