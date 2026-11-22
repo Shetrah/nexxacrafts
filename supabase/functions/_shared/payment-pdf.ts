@@ -10,7 +10,7 @@ const SLATE = [0.31, 0.37, 0.47];
 const PALE = [0.94, 0.96, 0.99];
 const WATERMARK = [0.955, 0.962, 0.976];
 const SITE_URL = 'https://nexxacrafts.co.ke';
-export const PAYMENT_PDF_DESIGN_VERSION = 4;
+export const PAYMENT_PDF_DESIGN_VERSION = 5;
 
 export interface PaymentPdfLine {
   description: string;
@@ -243,7 +243,7 @@ function pdfObjects(pages: string[], logo: Awaited<ReturnType<typeof loadLogoIma
     '',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /ZapfChancery-MediumItalic >>',
   ];
   objects.push(streamObject(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns ${logo.width} >> >> /Length ${logo.alpha.length} >>`, logo.alpha));
   objects.push(streamObject(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns ${logo.width} >> /SMask 6 0 R /Length ${logo.rgb.length} >>`, logo.rgb));
@@ -328,11 +328,11 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
     current.canvas.rightText(money(document.balanceDue ?? 0), 540, totalTop - 47, 11, 'F2', BLUE);
   }
 
-  // Signature block: Times italic gives a script-like signature appearance while remaining font-safe in PDF viewers.
-  current.canvas.text('Shannel Oduor', 385, totalTop - 122, 21, 'F3', NAVY);
-  current.canvas.line(375, totalTop - 129, 545, totalTop - 129, [0.69, 0.73, 0.80], 0.65);
-  current.canvas.text('Shannel Oduor', 385, totalTop - 143, 8, 'F2', NAVY);
-  current.canvas.text('Manager, Nexxacrafts', 385, totalTop - 156, 7, 'F1', SLATE);
+  // Zapf Chancery plus a slight shear gives the manager's name a lighter, handwritten signature feel.
+  current.canvas.ops.push(`q ${color([0.22, 0.30, 0.46])} BT /F3 27 Tf 1 0 0.22 1 366 ${(totalTop - 122).toFixed(2)} Tm (${safeText('Shannel Oduor')}) Tj ET Q`);
+  current.canvas.line(365, totalTop - 130, 545, totalTop - 130, [0.69, 0.73, 0.80], 0.65);
+  current.canvas.text('Shannel Oduor', 375, totalTop - 144, 8, 'F2', NAVY);
+  current.canvas.text('Manager, Nexxacrafts', 375, totalTop - 157, 7, 'F1', SLATE);
 
   current.canvas.line(42, 70, 553, 70, [0.84, 0.88, 0.93], 0.7);
   current.canvas.text(document.kind === 'invoice' ? 'Thank you for choosing NexxaCraft.' : 'Payment received with thanks.', 42, 54, 8, 'F2', NAVY);
