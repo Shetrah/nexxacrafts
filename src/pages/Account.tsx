@@ -64,27 +64,13 @@ const Account: React.FC = () => {
     setAccountCreated(false);
     setBusy(true);
     setError('');
-    setMessage('Your email is verified. Sending your account confirmation email…');
+    setMessage('Your email is verified. Taking you to sign in…');
     window.history.replaceState({}, '', '/account');
     void (async () => {
-      let deliveryMessage = '';
-      try {
-        if (!supabase) throw new Error('Email delivery is unavailable.');
-        const { data, error: invokeError } = await supabase.functions.invoke('contact-email', { body: { kind: 'account_verified' } });
-        if (invokeError) {
-          const response = (invokeError as typeof invokeError & { context?: Response }).context;
-          const body = response ? await response.clone().json().catch(() => null) : null;
-          throw new Error(body?.error || invokeError.message || 'The account confirmation email could not be sent.');
-        }
-        if (data?.error || data?.emailSent !== true) throw new Error(data?.error || 'The account confirmation email could not be confirmed.');
-        deliveryMessage = 'A confirmation email has been sent to your inbox.';
-      } catch (sendError) {
-        deliveryMessage = sendError instanceof Error ? `We could not send the follow-up email (${sendError.message}).` : 'We could not send the follow-up email.';
-      }
       try { await signOut(); } catch { /* Still take the customer to the sign-in form. */ }
       setForm(current => ({ ...current, email: confirmedEmail, password: '' }));
       setMode('signin');
-      setMessage(`Email verified successfully. ${deliveryMessage} You can now sign in.`);
+      setMessage('Account verified successfully. You can now sign in.');
       setBusy(false);
     })();
   }, [loading, signOut, user]);
