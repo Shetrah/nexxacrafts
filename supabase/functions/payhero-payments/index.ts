@@ -777,104 +777,234 @@ Deno.serve(async req => {
 
   if (action === 'status') {
     const invoiceId = text(payload.invoiceId, 50);
-    if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'Invalid invoice.' }, 400, origin);
+    if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) {
+      return json({ error: 'Invalid invoice.' }, 400, origin);
+    }
+
     try {
+      // Check all recent attempts for this invoice. Do not inspect only the
+      // newest row: an earlier STK attempt may have succeeded while a newer
+      // attempt is still queued.
       const query = new URLSearchParams({
-        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,receipt_whatsapp_sent_at,failure_reason,created_at',
+        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,payhero_reference,confirmed_at,receipt_sent_at,receipt_whatsapp_sent_at,failure_reason,created_at',
         invoice_id: `eq.${invoiceId}`,
         provider: 'eq.payhero',
         order: 'created_at.desc',
-        limit: '1',
+        limit: '100',
       });
-      const rows = await rest(url, service, `payments?${query}`) as Row[];
-      let payment = rows[0];
-      if (!payment) return json({ payment: null }, 200, origin);
 
-      if (['initiated', 'pending'].includes(text(payment.status, 30))) {
-        const authorization = payheroAuthorization();
-        const storedTransactionReference = text(payment.transaction_reference, 180).replace(/^PayHero\s+/i, '');
-        if (authorization && /^[A-Za-z0-9._:-]{3,180}$/.test(storedTransactionReference)) {
-          try {
-            const lookup = await fetch(
-              `${PAYHERO_API_BASE}/transaction-status?reference=${encodeURIComponent(storedTransactionReference)}`,
-              {
-                method: 'GET',
-                headers: { Authorization: authorization, Accept: 'application/json' },
-                signal: AbortSignal.timeout(15000),
-              },
-            );
-            const raw = await lookup.text();
-            let providerData: Row = {};
-            try { providerData = JSON.parse(raw) as Row; } catch { /* handled below */ }
+      let rows = await rest(url, service, `payments?${query}`) as Row[];
+      if (!rows.length) return json({ payment: null, attempts: [] }, 200, origin);
 
-            if (lookup.ok) {
-              let detail = providerData;
+      const authorization = payheroAuthorization();
+      if (authorization) {
+        const unresolved = rows.filter(payment =>
+          ['initiated', 'pending'].includes(text(payment.status, 30)),
+        );
+
+        // Batches keep the edge function responsive while still checking every
+        // unresolved attempt returned for the invoice.
+        for (let offset = 0; offset < unresolved.length; offset += 5) {
+          const batch = unresolved.slice(offset, offset + 5);
+          const results = await Promise.all(batch.map(async payment => {
+            // Current flow stores the PayHero response's `reference` in its own
+            // column. The fallbacks support rows created by earlier deployments.
+            const legacyTransactionReference = text(payment.transaction_reference, 180);
+            const lookupReference = text(payment.payhero_reference, 180)
+              || (legacyTransactionReference.startsWith('PayHero ')
+                ? legacyTransactionReference.replace(/^PayHero\s+/i, '')
+                : legacyTransactionReference);
+
+            if (!lookupReference || !/^[A-Za-z0-9._:-]{3,180}$/.test(lookupReference)) {
+              return { payment, skipped: true as const };
+            }
+
+            try {
+              const lookup = await fetch(
+                `${PAYHERO_API_BASE}/transaction-status?reference=${encodeURIComponent(lookupReference)}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    Authorization: authorization,
+                    Accept: 'application/json',
+                  },
+                  signal: AbortSignal.timeout(12000),
+                },
+              );
+              const raw = await lookup.text();
+              let data: Row = {};
+              try { data = JSON.parse(raw) as Row; } catch { /* reported below */ }
+
+              if (!lookup.ok) {
+                console.warn('PayHero transaction-status lookup failed', {
+                  paymentId: payment.id,
+                  httpStatus: lookup.status,
+                  response: raw.slice(0, 250),
+                });
+                return { payment, skipped: false as const, error: `PayHero status lookup returned HTTP ${lookup.status}.` };
+              }
+
+              let detail = data;
               for (const key of ['data', 'transaction', 'result']) {
                 if (detail[key] && typeof detail[key] === 'object' && !Array.isArray(detail[key])) {
                   detail = detail[key] as Row;
                   break;
                 }
               }
-              const providerStatus = text(detail.status ?? detail.payment_status ?? detail.transaction_status ?? detail.state, 40).toLowerCase();
-              const successFlag = detail.success === true || String(detail.success).toLowerCase() === 'true';
-              const failed = ['failed', 'failure', 'cancelled', 'canceled', 'rejected', 'declined', 'expired'].includes(providerStatus)
-                || (detail.success === false && providerStatus !== '' && !['queued', 'pending', 'processing', 'initiated', 'in_progress', 'waiting'].includes(providerStatus));
-              const successful = ['success', 'successful', 'paid', 'completed', 'complete', 'settled'].includes(providerStatus) || successFlag;
 
-              if (failed) {
-                await rest(url, service, `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`, {
+              // PayHero Kenya documents the transaction status values as
+              // QUEUED, SUCCESS and FAILED. `success: true` means the lookup
+              // request succeeded; it does NOT by itself mean the payment was paid.
+              const providerStatus = text(detail.status, 40).toUpperCase();
+              return { payment, skipped: false as const, lookupReference, detail, providerStatus };
+            } catch (error) {
+              console.warn('PayHero transaction-status request failed', {
+                paymentId: payment.id,
+                message: error instanceof Error ? error.message : String(error),
+              });
+              return { payment, skipped: false as const, error: 'Could not reach PayHero transaction-status endpoint.' };
+            }
+          }));
+
+          for (const result of results) {
+            if (result.skipped || 'error' in result) continue;
+
+            const payment = result.payment;
+            const detail = result.detail;
+            const status = result.providerStatus;
+
+            if (status === 'FAILED') {
+              await rest(
+                url,
+                service,
+                `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`,
+                {
                   method: 'PATCH',
                   body: JSON.stringify({
                     status: 'failed',
-                    failure_reason: text(detail.message ?? detail.error_message ?? detail.description, 300) || 'Payment was not completed.',
+                    failure_reason: text(detail.message ?? detail.error_message ?? detail.description, 300)
+                      || 'PayHero reported that the M-Pesa payment failed.',
                   }),
-                });
-                payment = { ...payment, status: 'failed' };
-              } else if (successful) {
-                const amount = Number(detail.amount ?? detail.paid_amount ?? detail.Amount ?? payment.amount);
-                if (Number.isFinite(amount) && amount > 0) {
-                  const confirmed = await rest(url, service, 'rpc/confirm_payhero_payment', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      p_external_reference: text(payment.provider_reference, 180),
-                      p_provider_reference: text(detail.reference ?? detail.payment_reference, 100),
-                      p_transaction_reference: text(detail.third_party_reference ?? detail.provider_reference ?? detail.MpesaReceiptNumber ?? detail.transaction_reference ?? detail.receipt_number, 100),
-                      p_paid_amount: amount,
-                      p_phone: text(detail.phone_number ?? detail.Phone ?? detail.phone, 40),
-                    }),
-                  }) as Row[];
-                  const confirmedPayment = confirmed?.[0];
-                  if (confirmedPayment) {
-                    try { await notifyAdmins(url, service, confirmedPayment.payment_id); }
-                    catch (error) { console.error('Admin dashboard notification failed', error); }
-                    try { await deliverPendingEmails(url, service, confirmedPayment.payment_id); }
-                    catch (error) { console.error('Payment was recorded, but receipt delivery is pending retry', error); }
-                    const refreshed = await rest(url, service, `payments?${query}`) as Row[];
-                    payment = refreshed[0] ?? { ...payment, status: 'confirmed', amount };
-                  }
-                }
-              }
-            } else {
-              console.warn('PayHero transaction status lookup failed', { status: lookup.status, response: raw.slice(0, 250) });
+                },
+              );
+              payment.status = 'failed';
+              payment.failure_reason = text(detail.message ?? detail.error_message ?? detail.description, 300)
+                || 'PayHero reported that the M-Pesa payment failed.';
+              continue;
             }
-          } catch (error) {
-            console.warn('PayHero transaction status lookup failed', error);
+
+            if (status !== 'SUCCESS') {
+              // QUEUED means PayHero has not yet received/processed the callback.
+              // Keep this attempt pending and let the next status poll check it.
+              continue;
+            }
+
+            const externalReference = text(payment.provider_reference, 180);
+            if (!externalReference) {
+              console.error('PayHero reports SUCCESS but payment has no external_reference for DB matching', {
+                paymentId: payment.id,
+                payheroReference: result.lookupReference,
+              });
+              continue;
+            }
+
+            // The documented status response may omit amount. Since this exact
+            // authenticated PayHero reference belongs to this payment row, use
+            // the requested amount only when the response does not include one.
+            const paidAmount = Number(
+              detail.amount ?? detail.paid_amount ?? detail.Amount ?? payment.amount,
+            );
+            if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+              console.error('PayHero returned SUCCESS with an invalid amount', {
+                paymentId: payment.id,
+                amount: detail.amount ?? detail.paid_amount ?? detail.Amount,
+              });
+              continue;
+            }
+
+            // Older deployments temporarily stored `PayHero <reference>` in
+            // transaction_reference. Clear only that temporary marker; the new
+            // payhero_reference column is retained for audit/status lookups.
+            if (text(payment.transaction_reference, 180).startsWith('PayHero ')) {
+              await rest(
+                url,
+                service,
+                `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`,
+                {
+                  method: 'PATCH',
+                  body: JSON.stringify({ transaction_reference: null }),
+                },
+              );
+            }
+
+            const mpesaReceipt = text(
+              detail.third_party_reference
+                ?? detail.provider_reference
+                ?? detail.MpesaReceiptNumber
+                ?? detail.transaction_reference
+                ?? detail.receipt_number,
+              100,
+            );
+
+            const confirmed = await rest(url, service, 'rpc/confirm_payhero_payment', {
+              method: 'POST',
+              body: JSON.stringify({
+                // This is our unique external_reference sent with the STK push;
+                // it matches payments.provider_reference in the database.
+                p_external_reference: externalReference,
+                p_provider_reference: text(detail.reference ?? result.lookupReference, 100),
+                p_transaction_reference: mpesaReceipt || null,
+                p_paid_amount: paidAmount,
+                p_phone: text(detail.phone_number ?? detail.Phone ?? detail.phone, 40),
+              }),
+            }) as Row[];
+
+            const confirmedPayment = confirmed?.[0];
+            if (confirmedPayment) {
+              payment.status = 'confirmed';
+              payment.transaction_reference = mpesaReceipt || payment.transaction_reference;
+              payment.confirmed_at = new Date().toISOString();
+              try { await notifyAdmins(url, service, confirmedPayment.payment_id); }
+              catch (error) { console.error('Admin dashboard notification failed', error); }
+              try { await deliverPendingEmails(url, service, confirmedPayment.payment_id); }
+              catch (error) { console.error('Payment was recorded, but receipt delivery is pending retry', error); }
+            }
           }
         }
       }
 
+      // Refresh all rows after processing. Prefer a confirmed payment for the
+      // checkout UI, even if a newer attempt remains queued.
+      rows = await rest(url, service, `payments?${query}`) as Row[];
+      const displayPayment = rows.find(payment =>
+        ['confirmed', 'reconciled'].includes(text(payment.status, 30)),
+      ) ?? rows[0];
+
       return json({
         payment: {
+          id: displayPayment.id,
+          status: displayPayment.status,
+          amount: displayPayment.amount,
+          transaction_reference: displayPayment.transaction_reference,
+          payhero_reference: displayPayment.payhero_reference,
+          confirmed_at: displayPayment.confirmed_at,
+          receipt_sent_at: displayPayment.receipt_sent_at,
+          receipt_whatsapp_sent_at: displayPayment.receipt_whatsapp_sent_at,
+          failure_reason: displayPayment.failure_reason,
+        },
+        attempts: rows.map(payment => ({
+          id: payment.id,
           status: payment.status,
           amount: payment.amount,
-          transaction_reference: payment.transaction_reference,
+          created_at: payment.created_at,
           confirmed_at: payment.confirmed_at,
-          receipt_sent_at: payment.receipt_sent_at,
-          receipt_whatsapp_sent_at: payment.receipt_whatsapp_sent_at,
+          transaction_reference: payment.transaction_reference,
+          payhero_reference: payment.payhero_reference,
           failure_reason: payment.failure_reason,
-        },
+        })),
       }, 200, origin);
     } catch (error) {
+      console.error('Payment status check failed', error);
       return json({ error: error instanceof Error ? error.message : 'Could not check payment status.' }, 500, origin);
     }
   }
@@ -1034,13 +1164,14 @@ Deno.serve(async req => {
         }, 502, origin);
       }
 
-      // Keep provider_reference for callback matching; temporarily store PayHero's
-      // transaction reference here for GET /transaction-status?reference=...
+      // `reference` is the exact identifier required by PayHero's documented
+      // GET /api/v2/transaction-status?reference=... endpoint. Store it in its
+      // own column; do not mix it with the M-Pesa receipt in transaction_reference.
       if (payheroReference) {
         try {
           await rest(url, service, `payments?id=eq.${encodeURIComponent(String(payment.id))}`, {
             method: 'PATCH',
-            body: JSON.stringify({ transaction_reference: `PayHero ${payheroReference}` }),
+            body: JSON.stringify({ payhero_reference: payheroReference }),
           });
         } catch (storageError) {
           // Callback still matches using provider_reference = externalRef.
