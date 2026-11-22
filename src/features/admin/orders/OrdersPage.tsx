@@ -357,6 +357,14 @@ export default function OrdersPage() {
         const { error: filesRemoveError } = await supabase.storage.from('customer-files').remove(removableCustomerFiles);
         if (filesRemoveError) throw new Error(`Could not remove the order’s client files: ${filesRemoveError.message}`);
       }
+      const paymentDocumentPaths = [
+        ...bundle.invoices.map(invoice => `invoices/${invoice.id}.pdf`),
+        ...bundle.payments.map(payment => `receipts/${payment.id}.pdf`),
+      ];
+      if (paymentDocumentPaths.length) {
+        const { error: documentRemoveError } = await supabase.storage.from('payment-documents').remove(paymentDocumentPaths);
+        if (documentRemoveError) throw new Error(`Could not remove generated invoice or receipt PDFs: ${documentRemoveError.message}`);
+      }
       const { error: deleteError } = await supabase.rpc('delete_admin_order', { p_order_id: order.id });
       if (deleteError) throw deleteError;
       setOrders(current => current.filter(item => item.id !== order.id));

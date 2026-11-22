@@ -286,7 +286,7 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
   const paymentDetails = await rest(
     url,
     service,
-    `payments?select=order_id,confirmed_at&id=eq.${encodeURIComponent(id)}&limit=1`,
+    `payments?select=order_id,confirmed_at,failure_reason&id=eq.${encodeURIComponent(id)}&limit=1`,
   ) as Row[];
   const paymentRecord = paymentDetails[0];
   const orderDetails = paymentRecord?.order_id
@@ -437,8 +437,8 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
     await sendEmail(
       adminEmail,
       `Payment received · ${text(row.invoice_number, 80)}`,
-      emailFrame('Payment notification', `<h1>Successful payment</h1><p>${esc(row.customer_name)} paid <b>${formatMoney(amount)}</b> for invoice <b>${esc(row.invoice_number)}</b>.</p><p>Receipt: <b>${esc(receipt || 'Confirmed')}</b></p><p>Customer email: ${esc(row.customer_email)}</p>`),
-      `Payment received: ${formatMoney(amount)}, invoice ${text(row.invoice_number, 80)}, receipt ${receipt}.`,
+      emailFrame('Payment notification', `<h1>Successful payment</h1><p>${esc(row.customer_name)} paid <b>${formatMoney(amount)}</b> for invoice <b>${esc(row.invoice_number)}</b>.</p><p>Receipt: <b>${esc(receipt || 'Confirmed')}</b></p><p>Customer email: ${esc(row.customer_email)}</p>${paymentRecord?.failure_reason ? `<p style="padding:12px;background:#fff1f0;color:#9f2d24;border-radius:8px"><b>Reconciliation required:</b> ${esc(paymentRecord.failure_reason)}</p>` : ''}`),
+      `Payment received: ${formatMoney(amount)}, invoice ${text(row.invoice_number, 80)}, receipt ${receipt}.${paymentRecord?.failure_reason ? ` Reconciliation required: ${text(paymentRecord.failure_reason, 300)}` : ''}`,
     );
     const sentAt = new Date().toISOString();
     await rest(url, service, `payment_email_outbox?payment_id=eq.${encodeURIComponent(id)}`, {
@@ -467,7 +467,7 @@ async function notifyAdmins(url: string, service: string, paymentId: unknown) {
   ) as Row[];
   if (!rows[0] || rows[0].dashboard_notified_at) return;
 
-  const paymentRows = await rest(url, service, `payments?select=invoice_id,amount,transaction_reference&id=eq.${encodeURIComponent(id)}`) as Row[];
+  const paymentRows = await rest(url, service, `payments?select=invoice_id,amount,transaction_reference,failure_reason&id=eq.${encodeURIComponent(id)}`) as Row[];
   const payment = paymentRows[0];
   if (!payment) return;
   const invoiceRows = await rest(url, service, `invoices?select=invoice_number,order_id&id=eq.${encodeURIComponent(String(payment.invoice_id))}`) as Row[];
@@ -478,7 +478,7 @@ async function notifyAdmins(url: string, service: string, paymentId: unknown) {
   const profiles = await rest(url, service, 'profiles?select=id&role=eq.admin') as Array<{ id: string }>;
 
   if (profiles.length) {
-    const message = `${text(order?.customer_name, 120) || 'A customer'} paid ${money(payment.amount)} for invoice ${text(invoice.invoice_number, 80)}${payment.transaction_reference ? ` (M-Pesa ${text(payment.transaction_reference, 50)})` : ''}.`;
+    const message = `${text(order?.customer_name, 120) || 'A customer'} paid ${money(payment.amount)} for invoice ${text(invoice.invoice_number, 80)}${payment.transaction_reference ? ` (M-Pesa ${text(payment.transaction_reference, 50)})` : ''}.${payment.failure_reason ? ` ACTION REQUIRED: ${text(payment.failure_reason, 220)}` : ''}`;
     await rest(url, service, 'notifications', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
@@ -780,7 +780,7 @@ Deno.serve(async req => {
     if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'Invalid invoice.' }, 400, origin);
     try {
       const query = new URLSearchParams({
-        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,receipt_whatsapp_sent_at,created_at',
+        select: 'id,invoice_id,status,amount,transaction_reference,provider_reference,confirmed_at,receipt_sent_at,receipt_whatsapp_sent_at,failure_reason,created_at',
         invoice_id: `eq.${invoiceId}`,
         provider: 'eq.payhero',
         order: 'created_at.desc',
@@ -871,6 +871,7 @@ Deno.serve(async req => {
           confirmed_at: payment.confirmed_at,
           receipt_sent_at: payment.receipt_sent_at,
           receipt_whatsapp_sent_at: payment.receipt_whatsapp_sent_at,
+          failure_reason: payment.failure_reason,
         },
       }, 200, origin);
     } catch (error) {
@@ -924,21 +925,14 @@ Deno.serve(async req => {
       // Verify the exact destination before creating a pending payment row.
       const channel = await discoverPayheroChannel(authorization, preferredChannel);
 
-      const activeQuery = new URLSearchParams({
-        select: 'id',
-        invoice_id: `eq.${invoice.id}`,
-        provider: 'eq.payhero',
-        status: 'in.(pending,initiated)',
-        limit: '1',
-      });
-      const activeRows = await rest(url, service, `payments?${activeQuery}`) as Array<{ id: string }>;
-      if (activeRows.length) {
-        return json({
-          error: 'There is already an M-Pesa request awaiting a response. Complete or wait for it before requesting another prompt.',
-        }, 409, origin);
-      }
+      // Multiple attempts per invoice are intentionally allowed. Each attempt
+      // gets its own immutable external_reference, so callbacks reconcile the
+      // exact payment row. The database confirmation RPC serializes invoice
+      // balance updates and flags any genuine overpayment for reconciliation.
 
-      const externalRef = `${text(invoice.invoice_number, 60)}-${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+      // Use the complete UUID so every concurrent/retried STK attempt has
+      // its own practically collision-proof callback reference.
+      const externalRef = `${text(invoice.invoice_number, 60)}-${crypto.randomUUID().replace(/-/g, '').toUpperCase()}`;
       let payment: Row | undefined;
       try {
         const paymentInit = await rest(url, service, 'payments', {
@@ -959,7 +953,9 @@ Deno.serve(async req => {
         payment = paymentInit[0];
       } catch (error) {
         if (error instanceof Error && error.message.includes('already awaiting a result')) {
-          return json({ error: 'Another M-Pesa request was started for this invoice. Refresh to check its status.' }, 409, origin);
+          throw new Error(
+            'The database still has the duplicate-pending-payment trigger enabled. Run the supplied payment retry migration in Supabase SQL Editor, then retry.',
+          );
         }
         throw error;
       }
