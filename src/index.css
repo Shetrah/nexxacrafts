@@ -1067,6 +1067,13 @@
 html[data-theme='dark'] { color-scheme:dark; --nc-heading:#f1f5f9; }
 html[data-theme='dark'],
 html[data-theme='dark'] body { background:#0b1220; color:#cbd5e1; }
+/* Light-surface components are recoloured below in dark mode; keep their heading
+   and focus tokens in sync so modal titles and form section headings stay readable. */
+html[data-theme='dark'] .surface-light {
+  --nc-heading:#f1f5f9;
+  --nc-focus:#7895ff;
+  --nc-grid-line:rgba(241,245,249,.08);
+}
 html[data-theme='dark'] .bg-white,
 html[data-theme='dark'] [class~='bg-white/95'],
 html[data-theme='dark'] [class~='bg-white/90'],
