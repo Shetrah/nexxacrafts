@@ -20,6 +20,16 @@ async function isAdmin(url: string, anon: string, service: string, authorization
   return profiles.some(profile => ['admin', 'finance'].includes(profile.role));
 }
 
+async function getCaller(url: string, anon: string, service: string, authorization: string | null) {
+  if (!authorization) return null;
+  const response = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anon, Authorization: authorization } });
+  if (!response.ok) return null;
+  const user = await response.json() as { id?: string };
+  if (!user.id) return null;
+  const profiles = await db(url, service, `profiles?select=role&id=eq.${encodeURIComponent(user.id)}&limit=1`) as Array<{ role: string }>;
+  return { id: user.id, role: profiles[0]?.role || 'customer' };
+}
+
 async function whatsapp(apiKey: string, path: 'send' | 'media', data: Record<string, unknown>) {
   const response = await fetch(`https://whatsy.elitesamttech.co.ke/api/v1/messages/${path}`, { method: 'POST', headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   const bodyText = await response.text();
@@ -34,8 +44,13 @@ async function whatsapp(apiKey: string, path: 'send' | 'media', data: Record<str
 
 Deno.serve(async request => {
   const origin = request.headers.get('origin');
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: cors(origin) });
+  if (request.method === 'OPTIONS') {
+    if (origin && !allowedOrigins.has(origin)) return new Response('Origin not allowed.', { status: 403, headers: cors(null) });
+    return new Response('ok', { headers: cors(origin) });
+  }
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, origin);
+  if (origin && !allowedOrigins.has(origin)) return json({ error: 'Origin not allowed.' }, 403, origin);
+  if (Number(request.headers.get('content-length') || 0) > 16_384) return json({ error: 'Request is too large.' }, 413, origin);
 
   const url = Deno.env.get('SUPABASE_URL');
   const anon = Deno.env.get('SUPABASE_ANON_KEY');
@@ -47,16 +62,20 @@ Deno.serve(async request => {
   const action = text(payload.action, 40);
   try {
     if (action === 'new-order') {
-      // Public checkout may invoke this after saving an order. The recipient is
-      // fixed in a secret and the database key prevents repeated notifications.
+      // Only the order owner or authorized staff may trigger the service-role
+      // lookup and team notification. The recipient is fixed in a secret.
       const orderId = text(payload.orderId, 50);
       const to = text(Deno.env.get('WHATSAPP_ADMIN_PHONE'), 30);
       if (!/^[0-9a-f-]{36}$/i.test(orderId) || !to) return json({ error: 'Order notification is not configured.' }, 400, origin);
       const retry = payload.retry === true;
-      if (retry && !await isAdmin(url, anon, service, request.headers.get('authorization'))) return json({ error: 'Admin access is required to retry an order alert.' }, 403, origin);
-      const orders = await db(url, service, `orders?select=id,reference,customer_name,customer_email,customer_phone,status,payment_status,total&id=eq.${encodeURIComponent(orderId)}&limit=1`) as Array<Record<string, unknown>>;
+      const caller = await getCaller(url, anon, service, request.headers.get('authorization'));
+      if (!caller) return json({ error: 'A verified account is required to notify the team about an order.' }, 401, origin);
+      const staff = ['admin', 'finance'].includes(caller.role);
+      if (retry && !staff) return json({ error: 'Admin access is required to retry an order alert.' }, 403, origin);
+      const orders = await db(url, service, `orders?select=id,customer_id,reference,customer_name,customer_email,customer_phone,status,payment_status,total&id=eq.${encodeURIComponent(orderId)}&limit=1`) as Array<Record<string, unknown>>;
       const order = orders[0];
       if (!order) return json({ error: 'Order was not found.' }, 404, origin);
+      if (!staff && order.customer_id !== caller.id) return json({ error: 'This order does not belong to your account.' }, 403, origin);
       const idempotencyKey = `new-order:${orderId}`;
       const existingRows = await db(url, service, `whatsapp_delivery_logs?select=id,status&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`) as Array<Record<string, unknown>>;
       let deliveryLog = existingRows[0];

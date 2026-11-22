@@ -540,24 +540,11 @@ Deno.serve(async req => {
       response.ExternalReference ?? response.external_reference ?? payload.user_reference ?? payload.external_reference ?? payload.reference,
       100,
     );
-    const status = text(response.Status ?? response.status, 30).toLowerCase();
-    const callbackFlag = payload.status === true || String(payload.status).toLowerCase() === 'true';
-    const receiptReference = text(
-      response.MpesaReceiptNumber ?? response.third_party_reference ?? response.receipt_number,
-      100,
-    );
-    const success = callbackFlag
-      && ['success', 'successful', 'paid', 'completed'].includes(status)
-      && response.ResultCode !== undefined
-      && Number(response.ResultCode) === 0
-      // A success-shaped callback without Safaricom's receipt is not enough
-      // to settle an invoice. Leave it pending for the authenticated status lookup.
-      && Boolean(receiptReference);
     if (!externalRef) return json({ received: true }, 200, origin);
 
     try {
       const query = new URLSearchParams({
-        select: 'id,invoice_id,amount,status,order_id,provider_reference,transaction_reference',
+        select: 'id,invoice_id,amount,status,order_id,provider_reference,payhero_reference,transaction_reference',
         provider: 'eq.payhero',
         provider_reference: `eq.${externalRef}`,
         limit: '1',
@@ -566,24 +553,52 @@ Deno.serve(async req => {
       const payment = rows[0];
       if (!payment) return json({ received: true }, 200, origin);
 
-      if (!success) {
-        const explicitlyFailed = ['failed', 'failure', 'cancelled', 'canceled', 'rejected'].includes(status)
-          || (callbackFlag && response.ResultCode !== undefined && Number(response.ResultCode) !== 0);
-        if (!explicitlyFailed) return json({ received: true }, 200, origin);
+      // PayHero callbacks do not carry a documented signature. Treat the
+      // callback only as a wake-up signal and ask PayHero's authenticated API
+      // for the final result before writing any payment state.
+      const lookupReference = text(payment.payhero_reference, 180);
+      const authorization = payheroAuthorization();
+      if (!authorization || !lookupReference) return json({ received: true }, 200, origin);
+      const lookup = await fetch(
+        `${PAYHERO_API_BASE}/transaction-status?reference=${encodeURIComponent(lookupReference)}`,
+        { method: 'GET', headers: { Authorization: authorization, Accept: 'application/json' }, signal: AbortSignal.timeout(12000) },
+      );
+      if (!lookup.ok) {
+        console.warn('PayHero callback verification lookup failed', { status: lookup.status });
+        return json({ received: true }, 200, origin);
+      }
+      const lookupText = await lookup.text();
+      let detail = {} as Row;
+      try { detail = JSON.parse(lookupText) as Row; } catch { return json({ received: true }, 200, origin); }
+      for (const key of ['data', 'transaction', 'result']) {
+        if (detail[key] && typeof detail[key] === 'object' && !Array.isArray(detail[key])) {
+          detail = detail[key] as Row;
+          break;
+        }
+      }
+      const verifiedStatus = text(detail.status, 40).toUpperCase();
+      if (verifiedStatus === 'FAILED') {
         if (['initiated', 'pending'].includes(text(payment.status, 30))) {
           await rest(url, service, `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`, {
             method: 'PATCH',
             body: JSON.stringify({
               status: 'failed',
-              failure_reason: text(response.ResultDesc, 300) || 'Payment was not completed.',
+              failure_reason: text(detail.message ?? detail.error_message ?? detail.description, 300)
+                || 'PayHero reported that the M-Pesa payment failed.',
             }),
           });
         }
         return json({ received: true }, 200, origin);
       }
+      if (verifiedStatus !== 'SUCCESS') return json({ received: true }, 200, origin);
 
-      const amount = Number(response.Amount);
-      if (!Number.isFinite(amount) || amount <= 0) return json({ received: true }, 200, origin);
+      const receiptReference = text(
+        detail.third_party_reference ?? detail.provider_reference ?? detail.MpesaReceiptNumber
+          ?? detail.transaction_reference ?? detail.receipt_number,
+        100,
+      );
+      const amount = Number(detail.amount ?? detail.paid_amount ?? detail.Amount ?? payment.amount);
+      if (!receiptReference || !Number.isFinite(amount) || amount <= 0) return json({ received: true }, 200, origin);
       if (text(payment.transaction_reference, 160).startsWith('PayHero ')) {
         await rest(url, service, `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`, {
           method: 'PATCH',
@@ -595,10 +610,10 @@ Deno.serve(async req => {
         method: 'POST',
         body: JSON.stringify({
           p_external_reference: externalRef,
-          p_provider_reference: text(response.PayHeroReference ?? response.reference, 100),
+          p_provider_reference: text(detail.reference ?? lookupReference, 100),
           p_transaction_reference: receiptReference,
           p_paid_amount: amount,
-          p_phone: text(response.Phone, 40),
+          p_phone: text(detail.phone_number ?? detail.Phone ?? detail.phone, 40),
         }),
       }) as Row[];
       const paid = claimed?.[0];

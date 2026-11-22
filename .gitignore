@@ -23,3 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+*.bak
+*.backup
