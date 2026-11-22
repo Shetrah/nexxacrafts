@@ -1,14 +1,50 @@
 import React from 'react';
-import { ArrowRight, ArrowUpRight, FileText, MinusCircle, ShoppingBag } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, FileText, Image as ImageIcon, MinusCircle, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { money } from '../lib/catalog';
+
 const Cart: React.FC = () => {
   const { items, removeItem } = useCart();
   const priced = items.every(item => item.estimate !== null);
-  const total = items.reduce((sum,item) => sum + (item.estimate || 0),0);
-  return <div className="container-shell py-14"><div className="eyebrow">YOUR ORDER</div><h1 className="page-title mt-3">Shopping <span className="text-gradient">cart.</span></h1><p className="lead mt-3">Review your configured jobs before submitting the order.</p>
-    {items.length === 0 ? <div className="empty-state mt-10"><div className="empty-icon"><ShoppingBag size={27}/></div><h2 className="text-xl font-bold mt-4">Your cart is empty</h2><p className="text-sm text-slate-500 mt-2">Browse our services and configure the work you need.</p><Link to="/services" className="btn-primary mt-6">Explore services <ArrowUpRight size={17}/></Link></div> : <div className="grid lg:grid-cols-[1fr_350px] gap-8 mt-9 items-start"><div className="space-y-4">{items.map(item => <div className="cart-item" key={item.id}><div className="w-12 h-12 bg-blue-50 rounded-xl grid place-items-center text-blue-700"><FileText/></div><div className="flex-1 min-w-0"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">{item.serviceName}</h2><p className="text-xs text-slate-500 mt-1">Quantity: {item.quantity}</p></div><strong>{item.estimate === null ? 'Quote required' : money(item.estimate)}</strong></div><div className="mt-3 flex flex-wrap gap-2">{Object.entries(item.configuration).filter(([,value]) => value !== '' && value !== undefined).slice(0,4).map(([key,value]) => <span key={key} className="config-chip">{key.replace(/_/g,' ')}: {String(value)}</span>)}</div>{item.files.length > 0 && <p className="text-xs text-slate-400 mt-2">{item.files.length} file reference(s) attached</p>}</div><button onClick={() => removeItem(item.id)} className="text-slate-400 hover:text-red-600" aria-label="Remove item"><MinusCircle size={19}/></button></div>)}</div><aside className="summary-panel"><h2 className="font-bold text-lg">Order summary</h2><div className="flex justify-between mt-6 text-sm"><span className="text-slate-500">Items</span><strong>{items.length}</strong></div><div className="flex justify-between mt-3 text-sm"><span className="text-slate-500">{priced ? 'Order total' : 'Estimated amount'}</span><strong>{priced ? money(total) : 'Pending quote'}</strong></div><div className="border-t border-slate-100 mt-5 pt-5"><p className="text-xs text-slate-500">{priced ? 'Price is calculated from the selected options and active pricing rules.' : 'One or more items need a custom quote. The team will confirm the price before payment.'}</p><Link to="/checkout" className="btn-primary w-full mt-6">Continue to checkout <ArrowRight size={17}/></Link><Link to="/services" className="btn-outline w-full mt-3">Add another service</Link></div></aside></div>}
+  const total = items.reduce((sum, item) => sum + (item.estimate || 0), 0);
+
+  return <div className="container-shell py-14">
+    <div className="eyebrow">YOUR ORDER</div>
+    <h1 className="page-title mt-3">Shopping <span className="text-gradient">cart.</span></h1>
+    <p className="lead mt-3">Review your configured jobs before submitting the order.</p>
+    {items.length === 0 ? <div className="empty-state mt-10">
+      <div className="empty-icon"><ShoppingBag size={27}/></div><h2 className="mt-4 text-xl font-bold">Your cart is empty</h2>
+      <p className="mt-2 text-sm text-slate-500">Browse our services and configure the work you need.</p>
+      <Link to="/services" className="btn-primary mt-6">Explore services <ArrowUpRight size={17}/></Link>
+    </div> : <div className="mt-9 grid items-start gap-8 lg:grid-cols-[1fr_350px]">
+      <div className="space-y-4">{items.map(item => {
+        const isMount = item.serviceSlug === 'photo-mounting';
+        const detailRows: Array<[string, unknown]> = isMount
+          ? [['Size', item.configuration.mounting_size], ['Custom size', item.configuration.custom_size], ['Finish', item.configuration.mounting_finish], ['Copies', item.quantity], ['Photo', item.configuration.mount_photo_name]]
+          : Object.entries(item.configuration).filter(([, value]) => value !== '' && value !== undefined).slice(0, 4).map(([key, value]) => [key.replace(/_/g, ' '), value]);
+        return <div className="cart-item" key={item.id}>
+          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">{isMount ? <ImageIcon/> : <FileText/>}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h2 className="font-bold">{item.serviceName}{isMount ? ` · ${String(item.configuration.mounting_size || 'Mount')}` : ''}</h2><p className="mt-1 text-xs text-slate-500">Quantity: {item.quantity}</p></div>
+              <strong>{item.estimate === null ? 'Quote required' : money(item.estimate)}</strong>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">{detailRows.filter(([, value]) => value !== '' && value !== undefined).map(([key, value]) => <span key={key} className="config-chip">{key}: {String(value)}</span>)}</div>
+            {item.files.length > 0 && <p className="mt-2 text-xs text-slate-400">{isMount ? 'Photo uploaded and attached to this mount' : `${item.files.length} file reference(s) attached`}</p>}
+          </div>
+          <button onClick={() => removeItem(item.id)} className="text-slate-400 hover:text-red-600" aria-label="Remove item"><MinusCircle size={19}/></button>
+        </div>;
+      })}</div>
+      <aside className="summary-panel"><h2 className="font-bold text-lg">Order summary</h2>
+        <div className="mt-6 flex justify-between text-sm"><span className="text-slate-500">Items</span><strong>{items.length}</strong></div>
+        <div className="mt-3 flex justify-between text-sm"><span className="text-slate-500">{priced ? 'Order total' : 'Estimated amount'}</span><strong>{priced ? money(total) : 'Pending quote'}</strong></div>
+        <div className="mt-5 border-t border-slate-100 pt-5"><p className="text-xs text-slate-500">{priced ? 'Price is calculated from the selected options and active pricing rules.' : 'One or more items need a custom quote. The team will confirm the price before payment.'}</p>
+          <Link to="/checkout" className="btn-primary mt-6 w-full">Continue to checkout <ArrowRight size={17}/></Link><Link to="/services" className="btn-outline mt-3 w-full">Add another service</Link>
+        </div>
+      </aside>
+    </div>}
   </div>;
 };
+
 export default Cart;

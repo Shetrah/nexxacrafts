@@ -44,7 +44,7 @@ const Checkout: React.FC = () => {
             const details=Object.entries(config).flatMap(([key,raw])=>{
               if(raw===null||raw===undefined||raw===''||raw===false)return [];
               const field=fields.find(item=>item.name===key);
-              const label=field?.label||key.replace(/[_-]+/g,' ').replace(/\b\w/g,char=>char.toUpperCase());
+              const label=key==='mount_photo_name'?'Uploaded photo':field?.label||key.replace(/[_-]+/g,' ').replace(/\b\w/g,char=>char.toUpperCase());
               let value=typeof raw==='boolean'?(raw?'Yes':'No'):String(raw);
               if(field?.type==='file'){try{const parsed=JSON.parse(value);value=Array.isArray(parsed)?`${parsed.length} file${parsed.length===1?'':'s'} attached`:'File attached';}catch{value='File attached';}}
               const optionPrice=field?.type==='select'?Number(field.optionPrices?.[String(raw)]??0):0;

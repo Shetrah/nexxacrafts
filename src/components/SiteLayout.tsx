@@ -7,6 +7,7 @@ import { Logo } from './brand/Logo';
 import { company } from '../content/company';
 import { useCatalog } from '../context/CatalogContext';
 import ThemeToggle from './ThemeToggle';
+import ChatAssistant from '@/features/assistant/ChatAssistant';
 
 const SiteLayout: React.FC = () => {
   const services = useCatalog();
@@ -58,6 +59,7 @@ const SiteLayout: React.FC = () => {
         </div>
       </div><div className="footer-bottom"><div className="container-shell flex flex-col justify-between gap-2 py-5 text-xs text-slate-500 sm:flex-row"><span>© {new Date().getFullYear()} {settings.business_name}. All rights reserved.</span><span className="flex flex-wrap gap-x-5 gap-y-1"><Link to="/account">Customer account</Link><Link to="/admin">Staff portal</Link><span>Made with care in Kenya</span></span></div></div>
     </footer>
+    <ChatAssistant />
   </div>;
 };
 export default SiteLayout;

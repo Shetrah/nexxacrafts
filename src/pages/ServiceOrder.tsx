@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Upload, Info, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Info, ShieldCheck, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalog } from '../context/CatalogContext';
 import { useCart } from '../context/CartContext';
@@ -24,6 +24,9 @@ const ServiceOrder: React.FC = () => {
   const [rates, setRates] = useState<PricingRate[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [photoMounts, setPhotoMounts] = useState<Array<{ id: string; size: string; customSize: string; finish: string; quantity: number; photoName: string }>>([
+    { id: crypto.randomUUID(), size: '', customSize: '', finish: '', quantity: 1, photoName: '' },
+  ]);
   useEffect(() => { loadPricingRates().then(setRates).catch(() => setRates([])); }, []);
   const estimate = useMemo(() => service ? calculateEstimate(service.slug, values, rates, service.fields) : null, [service, values, rates]);
   if (!service) return <div className="container-shell py-24 text-center"><h1 className="text-2xl font-bold">Service not found</h1><Link to="/services" className="text-link mt-4">Browse services</Link></div>;
@@ -46,6 +49,23 @@ const ServiceOrder: React.FC = () => {
     ...(needsDesignAssistance ? missingDesignDefaults : []),
     ...(printReadyChoice && !configuredPrintReadyUpload ? [{ name: 'print_ready_artwork', label: 'Upload print-ready artwork', type: 'file' as const, accept: 'image/*,.pdf,.zip,.ai,.dxf,.svg', maxSizeMb: 100, multiple: true, required: true, help: 'Upload the artwork you want printed. You can attach multiple design files, up to 100 MB each.' }] : []),
   ];
+  const isPhotoMounting = service.slug === 'photo-mounting';
+  const sizeField = service.fields.find(field => field.name === 'mounting_size');
+  const finishField = service.fields.find(field => field.name === 'mounting_finish');
+  const customSizeField = service.fields.find(field => field.name === 'custom_size');
+  const photoMountField = (id: string): ServiceField => ({ name: `mount_photo_${id}`, label: 'Photo for this mount', type: 'file', required: true, accept: 'image/*', maxSizeMb: 100, help: 'Upload the photo that should be printed and mounted at the size selected above.' });
+  const photoMountEstimate = (mount: typeof photoMounts[number]) => {
+    if (!mount.size || !mount.finish || mount.size === 'Custom size' && !mount.customSize.trim()) return null;
+    return calculateEstimate(service.slug, {
+      mounting_size: mount.size,
+      custom_size: mount.customSize,
+      mounting_finish: mount.finish,
+      quantity: mount.quantity,
+    }, rates, service.fields);
+  };
+  const hasPhotoMountBaseRate = rates.some(rate => rate.service_slug === service.slug && rate.active && rate.unit_rate > 0);
+  const photoMountTotal = photoMounts.reduce((sum, mount) => sum + (photoMountEstimate(mount) ?? 0), 0);
+  const photoMountHasUnknownPrice = photoMounts.some(mount => photoMountEstimate(mount) === null);
 
   const setValue = (name: string, value: string | number | boolean) => {
     const fieldsToClear = service.fields.filter(field => field.showWhen?.field === name && field.showWhen.equals !== value);
@@ -117,6 +137,34 @@ const ServiceOrder: React.FC = () => {
   };
 
   const handleAdd = () => {
+    if (isPhotoMounting) {
+      const missing = photoMounts.flatMap((mount, index) => {
+        const entry: string[] = [];
+        if (!mount.size) entry.push(`Mount ${index + 1}: size`);
+        if (mount.size === 'Custom size' && !mount.customSize.trim()) entry.push(`Mount ${index + 1}: custom size`);
+        if (!mount.finish) entry.push(`Mount ${index + 1}: finish`);
+        if (!fieldFiles[`mount_photo_${mount.id}`]?.[0]) entry.push(`Mount ${index + 1}: photo upload`);
+        if (!Number.isFinite(mount.quantity) || mount.quantity < 1) entry.push(`Mount ${index + 1}: quantity`);
+        return entry;
+      });
+      if (missing.length) { setError(`Complete these details: ${missing.join(', ')}.`); return; }
+      if (service.pricingMode === 'instant' && photoMountHasUnknownPrice) { setError('One or more selected sizes do not have an active price yet. Ask the team for a quote or contact an administrator to set the size prices.'); return; }
+      photoMounts.forEach(mount => {
+        const photoPath = fieldFiles[`mount_photo_${mount.id}`]?.[0];
+        if (!photoPath) return;
+        const configuration: Record<string, string | number | boolean> = {
+          mounting_size: mount.size,
+          mounting_finish: mount.finish,
+          quantity: mount.quantity,
+          mount_photo_name: mount.photoName,
+          ...(mount.size === 'Custom size' ? { custom_size: mount.customSize } : {}),
+        };
+        const mountEstimate = photoMountEstimate(mount);
+        addItem({ id: crypto.randomUUID(), serviceSlug: service.slug, serviceName: service.name, configuration, quantity: mount.quantity, estimate: mountEstimate, files: [photoPath] });
+      });
+      navigate('/cart');
+      return;
+    }
     const missing = visibleUiFields.filter(field => field.required && (field.type === 'checkbox' ? values[field.name] !== true : values[field.name] === undefined || values[field.name] === '')).map(field => field.label);
     if (missing.length) { setError(`Please complete: ${missing.join(', ')}.`); return; }
     if (service.pricingMode === 'instant' && estimate === null) { setError('This service is configured for instant estimates, but an administrator has not yet entered an active rate. Submit a custom quote for now.'); return; }
@@ -136,16 +184,47 @@ const ServiceOrder: React.FC = () => {
   const designFields = visibleUiFields.filter(field => designFieldNames.has(field.name));
   const standardFields = visibleUiFields.filter(field => !designFieldNames.has(field.name));
 
+  const updatePhotoMount = (id: string, patch: Partial<typeof photoMounts[number]>) => {
+    setPhotoMounts(current => current.map(mount => mount.id === id ? { ...mount, ...patch } : mount));
+    setError('');
+  };
+  const removePhotoMount = (id: string) => {
+    const fieldName = `mount_photo_${id}`;
+    const uploaded = fieldFiles[fieldName] ?? [];
+    setFiles(current => current.filter(path => !uploaded.includes(path)));
+    setFieldFiles(current => { const next = { ...current }; delete next[fieldName]; return next; });
+    setValues(current => { const next = { ...current }; delete next[fieldName]; return next; });
+    setPhotoMounts(current => current.filter(mount => mount.id !== id));
+  };
+
   return <div className="container-shell py-12"><Link to="/services" className="back-link"><ArrowLeft size={16}/> All services</Link><div className="grid lg:grid-cols-[1fr_360px] gap-10 mt-7 items-start">
     <div><div className="eyebrow">CUSTOM ORDER CONFIGURATOR · {service.category.toUpperCase()}</div><h1 className="page-title mt-3">{service.name}</h1><p className="lead mt-3 max-w-2xl">{service.description}</p>
       <div className="form-panel mt-8"><div className="flex items-start justify-between gap-4 mb-7"><div><h2 className="text-xl font-bold">Configure your requirements</h2><p className="text-sm text-slate-500 mt-1">Fields marked with * are required.</p></div><span className="step-pill">STEP 1 OF 2</span></div>
-        <div className="grid md:grid-cols-2 gap-5">{standardFields.map(renderQuestion)}{needsDesignAssistance && <section className="md:col-span-2 rounded-2xl border border-brand-100 bg-brand-50/40 p-5"><div className="mb-4"><h3 className="font-bold text-lg">Design order brief</h3><p className="form-help mt-1">Tell our design team what to create and attach any logos or visual references.</p></div><div className="grid md:grid-cols-2 gap-5">{designFields.map(renderQuestion)}</div></section>}</div>
-        {service.allowFileUploads && <div className="mt-8 border-t border-slate-100 pt-7"><div className="flex items-center gap-2 font-bold"><Upload size={18} className="text-blue-600"/> Upload artwork or supporting files</div><p className="form-help mt-1">PDF, PNG, JPG, SVG, AI, DXF and other relevant formats. Maximum 100 MB per file. Technical file suitability is reviewed before production.</p><MagneticDropZone className="mt-4" multiple accept="image/*,.pdf,.zip,.ai,.dxf,.svg" maxSize={100*1024*1024} busy={uploading} onFilesChange={selected=>void handleFiles(selected)}/>{generalFiles.length>0&&<div className="mt-3 space-y-2">{generalFiles.map((file,index)=><div key={`${file}-${index}`} className="file-row"><span className="truncate">{file.split('/').pop()}</span><button type="button" onClick={()=>{setGeneralFiles(current=>current.filter((_,i)=>i!==index));setFiles(current=>current.filter(path=>path!==file));}} className="text-xs text-red-600">Remove</button></div>)}</div>}{notice&&<p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-700">{notice}</p>}</div>}
+        {isPhotoMounting ? <section className="space-y-4">
+          <div className="rounded-xl border border-line bg-brand-50/30 p-4 text-sm text-slate-600">Add one entry for each different photo and size. Each entry has its own uploaded image, selected mount size, finish, and quantity. The same photo can be ordered in multiple copies.</div>
+          {photoMounts.map((mount, index) => {
+            const fileField = photoMountField(mount.id);
+            const estimateForMount = photoMountEstimate(mount);
+            return <article key={mount.id} className="rounded-2xl border border-line bg-white/70 p-5 shadow-sm dark:bg-slate-900/60">
+              <div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-brand-50 text-brand-700"><ImageIcon size={17}/></span><h3 className="font-bold">Photo mount {index + 1}</h3></div>{photoMounts.length > 1 && <button type="button" onClick={() => removePhotoMount(mount.id)} className="btn-outline btn-sm text-red-600"><Trash2 size={15}/> Remove</button>}</div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <div><label className="form-label" htmlFor={`mount-size-${mount.id}`}>{sizeField?.label ?? 'Mounting size'} *</label><select id={`mount-size-${mount.id}`} required className="form-control" value={mount.size} onChange={event => updatePhotoMount(mount.id, { size: event.target.value, customSize: event.target.value === 'Custom size' ? mount.customSize : '' })}><option value="">Select a size</option>{(sizeField?.options ?? []).map(option => { const price = Number(sizeField?.optionPrices?.[option] ?? 0); return <option key={option} value={option}>{option}{price > 0 ? ` — ${money(price)} each` : ''}</option>; })}</select>{mount.size && Number(sizeField?.optionPrices?.[mount.size] ?? 0) <= 0 && <p className="form-help">{hasPhotoMountBaseRate ? 'No separate price is set for this size; the active base rate applies.' : 'An administrator needs to set a price for this size before checkout.'}</p>}</div>
+                {mount.size === 'Custom size' && <div><label className="form-label" htmlFor={`mount-custom-${mount.id}`}>{customSizeField?.label ?? 'Custom size details (cm)'} *</label><input id={`mount-custom-${mount.id}`} required className="form-control" value={mount.customSize} onChange={event => updatePhotoMount(mount.id, { customSize: event.target.value })} placeholder={customSizeField?.help ?? 'Width × height in centimetres'}/></div>}
+                <div><label className="form-label" htmlFor={`mount-finish-${mount.id}`}>{finishField?.label ?? 'Mount finish'} *</label><select id={`mount-finish-${mount.id}`} required className="form-control" value={mount.finish} onChange={event => updatePhotoMount(mount.id, { finish: event.target.value })}><option value="">Select a finish</option>{(finishField?.options ?? []).map(option => <option key={option} value={option}>{option}{Number(finishField?.optionPrices?.[option] ?? 0) > 0 ? ` — +${money(Number(finishField?.optionPrices?.[option]))}` : ''}</option>)}</select></div>
+                <div><label className="form-label" htmlFor={`mount-quantity-${mount.id}`}>Quantity *</label><input id={`mount-quantity-${mount.id}`} className="form-control" type="number" min={1} step={1} required value={mount.quantity} onChange={event => updatePhotoMount(mount.id, { quantity: Math.max(1, Number(event.target.value) || 1) })}/></div>
+                <div className="md:col-span-2"><label className="form-label">Photo for this mount *</label><MagneticDropZone className="mt-2" accept="image/*" maxSize={100 * 1024 * 1024} multiple={false} busy={uploading} onFilesChange={selected => { updatePhotoMount(mount.id, { photoName: selected[0]?.name ?? '' }); void handleFiles(selected, fileField); }}/>{(fieldFiles[fileField.name] ?? []).map(path => <div key={path} className="file-row mt-2"><span className="truncate">{mount.photoName || path.split('/').pop()}</span><button type="button" onClick={() => { removeFieldFile(fileField, path); updatePhotoMount(mount.id, { photoName: '' }); }} className="text-xs text-red-600">Remove</button></div>)}</div>
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-sm"><span className="text-slate-500">This entry</span><strong>{estimateForMount === null ? 'Price pending' : money(estimateForMount)}</strong></div>
+            </article>;
+          })}
+          <button type="button" onClick={() => setPhotoMounts(current => [...current, { id: crypto.randomUUID(), size: '', customSize: '', finish: '', quantity: 1, photoName: '' }])} className="btn-outline"><Plus size={17}/> Add another photo mount</button>
+        </section> : <div className="grid md:grid-cols-2 gap-5">{standardFields.map(renderQuestion)}{needsDesignAssistance && <section className="md:col-span-2 rounded-2xl border border-brand-100 bg-brand-50/40 p-5"><div className="mb-4"><h3 className="font-bold text-lg">Design order brief</h3><p className="form-help mt-1">Tell our design team what to create and attach any logos or visual references.</p></div><div className="grid md:grid-cols-2 gap-5">{designFields.map(renderQuestion)}</div></section>}</div>}
+        {!isPhotoMounting && service.allowFileUploads && <div className="mt-8 border-t border-slate-100 pt-7"><div className="flex items-center gap-2 font-bold"><Upload size={18} className="text-blue-600"/> Upload artwork or supporting files</div><p className="form-help mt-1">PDF, PNG, JPG, SVG, AI, DXF and other relevant formats. Maximum 100 MB per file. Technical file suitability is reviewed before production.</p><MagneticDropZone className="mt-4" multiple accept="image/*,.pdf,.zip,.ai,.dxf,.svg" maxSize={100*1024*1024} busy={uploading} onFilesChange={selected=>void handleFiles(selected)}/>{generalFiles.length>0&&<div className="mt-3 space-y-2">{generalFiles.map((file,index)=><div key={`${file}-${index}`} className="file-row"><span className="truncate">{file.split('/').pop()}</span><button type="button" onClick={()=>{setGeneralFiles(current=>current.filter((_,i)=>i!==index));setFiles(current=>current.filter(path=>path!==file));}} className="text-xs text-red-600">Remove</button></div>)}</div>}{notice&&<p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-700">{notice}</p>}</div>}
         {error && <p className="mt-5 text-sm text-red-700 bg-red-50 p-3 rounded-lg">{error}</p>}
         <div className="mt-8 flex flex-col sm:flex-row gap-3"><button onClick={handleAdd} disabled={uploading} className="btn-primary btn-lg">Add configured job to cart <ArrowRight size={17}/></button><Link to="/quote" className="btn-outline btn-lg">Request a custom quote</Link></div>
       </div>
     </div>
-    <aside className="space-y-5 lg:sticky lg:top-28"><div className="summary-panel"><div className="eyebrow">ORDER SUMMARY</div><h3 className="font-bold text-lg mt-2">{service.name}</h3><p className="text-sm text-slate-500 mt-2">{service.turnaround}</p><div className="border-t border-slate-100 mt-6 pt-5"><p className="text-xs text-slate-500">{estimate !== null ? 'Configured estimate' : 'Pricing status'}</p><p className="text-2xl font-extrabold mt-1">{estimate !== null ? `KES ${estimate.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : service.pricingMode === 'quote' ? 'Custom quote' : 'Rate not set'}</p><p className="text-xs text-slate-400 mt-2">{estimate !== null ? 'Indicative estimate based on current configured rates. Final price may change after file and specification review.' : 'Your team can configure approved rates in the admin portal. Until then, request a quote.'}</p></div><div className="mt-6 space-y-3 text-sm"><div className="flex gap-2"><ShieldCheck size={17} className="text-emerald-600 shrink-0"/><span>Specifications reviewed before production.</span></div><div className="flex gap-2"><Info size={17} className="text-blue-600 shrink-0"/><span>Production starts after quote, proof (where applicable) and payment approval.</span></div></div></div><div className="rounded-2xl border border-slate-200 p-5"><h3 className="font-bold">Need help with specifications?</h3><p className="text-sm text-slate-500 mt-2">Send us your brief and our team can help you choose the right materials and options.</p><Link to="/contact" className="text-link mt-4">Contact our team <ArrowRight size={15}/></Link></div></aside>
+    <aside className="space-y-5 lg:sticky lg:top-28"><div className="summary-panel"><div className="eyebrow">ORDER SUMMARY</div><h3 className="font-bold text-lg mt-2">{service.name}</h3><p className="text-sm text-slate-500 mt-2">{service.turnaround}</p><div className="border-t border-slate-100 mt-6 pt-5"><p className="text-xs text-slate-500">{isPhotoMounting ? 'Configured mounts' : estimate !== null ? 'Configured estimate' : 'Pricing status'}</p><p className="text-2xl font-extrabold mt-1">{isPhotoMounting ? (photoMountHasUnknownPrice ? 'Price pending' : money(photoMountTotal)) : estimate !== null ? `KES ${estimate.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : service.pricingMode === 'quote' ? 'Custom quote' : 'Rate not set'}</p>{isPhotoMounting&&<p className="text-xs text-slate-500 mt-1">{photoMounts.length} photo mount entr{photoMounts.length===1?'y':'ies'}</p>}<p className="text-xs text-slate-400 mt-2">{estimate !== null || isPhotoMounting && !photoMountHasUnknownPrice ? 'Estimate uses the current administrator-set size and finish prices.' : 'Your team can configure approved rates in the admin portal. Until then, request a quote.'}</p></div><div className="mt-6 space-y-3 text-sm"><div className="flex gap-2"><ShieldCheck size={17} className="text-emerald-600 shrink-0"/><span>Specifications reviewed before production.</span></div><div className="flex gap-2"><Info size={17} className="text-blue-600 shrink-0"/><span>Production starts after quote, proof (where applicable) and payment approval.</span></div></div></div><div className="rounded-2xl border border-slate-200 p-5"><h3 className="font-bold">Need help with specifications?</h3><p className="text-sm text-slate-500 mt-2">Send us your brief and our team can help you choose the right materials and options.</p><Link to="/contact" className="text-link mt-4">Contact our team <ArrowRight size={15}/></Link></div></aside>
   </div></div>;
 };
 export default ServiceOrder;
