@@ -19,12 +19,22 @@ function fromRecord(row: PortfolioProjectRow): PortfolioItem {
 }
 
 function ProjectPictorial({ item }: { item: PortfolioItem }) {
-  const image = <img src={item.imageUrl || portfolioImageByKey[item.imageKey]} alt={item.illustrative ? `Illustrative image for ${item.title}` : `${item.title} project preview`} loading="lazy"/>;
   const isWebsite = item.category === 'digital' && item.link;
-  return <div className="portfolio-project-image">
-    {isWebsite ? <a className="portfolio-homepage-link" href={item.link!.href} target="_blank" rel="noreferrer" aria-label={`Open ${item.title} homepage in a new tab`}>
-      {image}<span className="portfolio-open-homepage">Open homepage <ExternalLink size={13}/></span><span className="portfolio-image-arrow" aria-hidden="true"><ArrowUpRight size={19}/></span>
-    </a> : <>{image}<span className="portfolio-image-arrow" aria-hidden="true"><ArrowUpRight size={19}/></span></>}
+  const websiteUrl = (() => {
+    if (!isWebsite) return '';
+    try {
+      const url = new URL(item.link!.href);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+    } catch { return ''; }
+  })();
+  const image = <img src={item.imageUrl || portfolioImageByKey[item.imageKey]} alt={item.illustrative ? `Illustrative image for ${item.title}` : `${item.title} project preview`} loading="lazy"/>;
+  return <div className={`portfolio-project-image${isWebsite ? ' portfolio-project-image-website' : ''}`}>
+    {isWebsite ? <>
+      {websiteUrl ? <div className="portfolio-website-preview" aria-label={`${item.title} live homepage preview`}>
+        <iframe src={websiteUrl} title={`${item.title} homepage`} loading="lazy" referrerPolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" allow="fullscreen" />
+        <a className="portfolio-visit-website" href={websiteUrl} target="_blank" rel="noopener noreferrer" aria-label={`Visit ${item.title} website`}>Visit website <ExternalLink size={14}/></a>
+      </div> : <div className="portfolio-website-preview portfolio-website-preview-empty"><span>Website preview unavailable</span></div>}
+    </> : <>{image}<span className="portfolio-image-arrow" aria-hidden="true"><ArrowUpRight size={19}/></span></>}
     <span className="portfolio-category">{item.category}</span>{item.illustrative&&<span className="portfolio-image-note">Illustrative image</span>}
   </div>;
 }
