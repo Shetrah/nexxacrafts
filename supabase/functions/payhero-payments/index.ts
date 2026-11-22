@@ -542,9 +542,17 @@ Deno.serve(async req => {
     );
     const status = text(response.Status ?? response.status, 30).toLowerCase();
     const callbackFlag = payload.status === true || String(payload.status).toLowerCase() === 'true';
+    const receiptReference = text(
+      response.MpesaReceiptNumber ?? response.third_party_reference ?? response.receipt_number,
+      100,
+    );
     const success = callbackFlag
       && ['success', 'successful', 'paid', 'completed'].includes(status)
-      && (response.ResultCode === undefined || Number(response.ResultCode) === 0);
+      && response.ResultCode !== undefined
+      && Number(response.ResultCode) === 0
+      // A success-shaped callback without Safaricom's receipt is not enough
+      // to settle an invoice. Leave it pending for the authenticated status lookup.
+      && Boolean(receiptReference);
     if (!externalRef) return json({ received: true }, 200, origin);
 
     try {
@@ -559,6 +567,9 @@ Deno.serve(async req => {
       if (!payment) return json({ received: true }, 200, origin);
 
       if (!success) {
+        const explicitlyFailed = ['failed', 'failure', 'cancelled', 'canceled', 'rejected'].includes(status)
+          || (callbackFlag && response.ResultCode !== undefined && Number(response.ResultCode) !== 0);
+        if (!explicitlyFailed) return json({ received: true }, 200, origin);
         if (['initiated', 'pending'].includes(text(payment.status, 30))) {
           await rest(url, service, `payments?id=eq.${encodeURIComponent(String(payment.id))}&status=in.(initiated,pending)`, {
             method: 'PATCH',
@@ -585,7 +596,7 @@ Deno.serve(async req => {
         body: JSON.stringify({
           p_external_reference: externalRef,
           p_provider_reference: text(response.PayHeroReference ?? response.reference, 100),
-          p_transaction_reference: text(response.MpesaReceiptNumber, 100),
+          p_transaction_reference: receiptReference,
           p_paid_amount: amount,
           p_phone: text(response.Phone, 40),
         }),
@@ -946,6 +957,17 @@ Deno.serve(async req => {
               100,
             );
 
+            // PayHero status `SUCCESS` is authenticated, but require the M-Pesa
+            // receipt before applying money to an invoice. A cancellation or
+            // incomplete provider record must never appear as a paid order.
+            if (!mpesaReceipt) {
+              console.warn('PayHero reports SUCCESS without an M-Pesa receipt; payment remains pending', {
+                paymentId: payment.id,
+                payheroReference: result.lookupReference,
+              });
+              continue;
+            }
+
             const confirmed = await rest(url, service, 'rpc/confirm_payhero_payment', {
               method: 'POST',
               body: JSON.stringify({
@@ -953,7 +975,7 @@ Deno.serve(async req => {
                 // it matches payments.provider_reference in the database.
                 p_external_reference: externalReference,
                 p_provider_reference: text(detail.reference ?? result.lookupReference, 100),
-                p_transaction_reference: mpesaReceipt || null,
+                p_transaction_reference: mpesaReceipt,
                 p_paid_amount: paidAmount,
                 p_phone: text(detail.phone_number ?? detail.Phone ?? detail.phone, 40),
               }),

@@ -39,6 +39,9 @@ interface AuthContextValue {
 }
 
 const PROFILE_COLUMNS = 'id, full_name, role, phone, company';
+// Confirmation links must always return to the public site, including when an
+// administrator or customer creates an account while testing on localhost.
+const SIGNUP_CONFIRMATION_URL = 'https://nexxacrafts.co.ke/account?confirmed=1';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -118,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password,
           options: {
             data: { full_name: name, phone, company },
-            emailRedirectTo: `${window.location.origin}/account?confirmed=1`,
+            emailRedirectTo: SIGNUP_CONFIRMATION_URL,
           },
         });
         if (error) throw error;
@@ -128,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error } = await supabase.auth.resend({
           type: 'signup',
           email,
-          options: { emailRedirectTo: `${window.location.origin}/account?confirmed=1` },
+          options: { emailRedirectTo: SIGNUP_CONFIRMATION_URL },
         });
         if (error) throw error;
       },

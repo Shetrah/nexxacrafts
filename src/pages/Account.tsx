@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Building2, CalendarDays, CheckCircle2, CircleDollarSign, Eye, EyeOff, KeyRound, Loader2, LogOut, Mail, MailCheck, PackageSearch, Pencil, Phone, Receipt, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +38,7 @@ const Account: React.FC = () => {
   const [invoices, setInvoices] = useState<AccountInvoice[]>([]);
   const [confirmationPending, setConfirmationPending] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
+  const verificationCallbackHandled = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '', company: '' });
   const [editProfile, setEditProfile] = useState(false);
@@ -48,8 +49,45 @@ const Account: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('confirmed') !== '1') return;
-    if (user?.email_confirmed_at) setMessage('Your email is confirmed. You can now sign in.');
-  }, [user]);
+    if (loading || verificationCallbackHandled.current) return;
+    if (!user?.email_confirmed_at) {
+      verificationCallbackHandled.current = true;
+      setMode('signin');
+      setMessage('Email confirmation was completed. Sign in to continue.');
+      window.history.replaceState({}, '', '/account');
+      return;
+    }
+
+    verificationCallbackHandled.current = true;
+    const confirmedEmail = user.email ?? '';
+    setMode('signin');
+    setAccountCreated(false);
+    setBusy(true);
+    setError('');
+    setMessage('Your email is verified. Sending your account confirmation email…');
+    window.history.replaceState({}, '', '/account');
+    void (async () => {
+      let deliveryMessage = '';
+      try {
+        if (!supabase) throw new Error('Email delivery is unavailable.');
+        const { data, error: invokeError } = await supabase.functions.invoke('contact-email', { body: { kind: 'account_verified' } });
+        if (invokeError) {
+          const response = (invokeError as typeof invokeError & { context?: Response }).context;
+          const body = response ? await response.clone().json().catch(() => null) : null;
+          throw new Error(body?.error || invokeError.message || 'The account confirmation email could not be sent.');
+        }
+        if (data?.error || data?.emailSent !== true) throw new Error(data?.error || 'The account confirmation email could not be confirmed.');
+        deliveryMessage = 'A confirmation email has been sent to your inbox.';
+      } catch (sendError) {
+        deliveryMessage = sendError instanceof Error ? `We could not send the follow-up email (${sendError.message}).` : 'We could not send the follow-up email.';
+      }
+      try { await signOut(); } catch { /* Still take the customer to the sign-in form. */ }
+      setForm(current => ({ ...current, email: confirmedEmail, password: '' }));
+      setMode('signin');
+      setMessage(`Email verified successfully. ${deliveryMessage} You can now sign in.`);
+      setBusy(false);
+    })();
+  }, [loading, signOut, user]);
 
   useEffect(() => {
     setProfileForm({ full_name: profile?.full_name ?? '', phone: profile?.phone ?? '', company: profile?.company ?? '' });
