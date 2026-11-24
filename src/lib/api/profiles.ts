@@ -33,6 +33,16 @@ export async function listStaffProfiles(): Promise<ProfileRow[]> {
   return expectRows<ProfileRow>(response);
 }
 
+export interface StaffDirectoryProfile extends ProfileRow {
+  email: string;
+}
+
+/** Full staff directory for the admin-only staff management screen. */
+export async function listStaffDirectory(): Promise<StaffDirectoryProfile[]> {
+  const response = await getClient().rpc('admin_list_staff_profiles');
+  return expectRows<StaffDirectoryProfile>(response);
+}
+
 export interface ListCustomerProfilesOptions {
   /** Maximum number of rows. Default 200. */
   limit?: number;

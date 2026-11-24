@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.gemini-assistant]
 verify_jwt = false
+
+# Staff invitations require a signed-in admin; the function also checks the role server-side.
+[functions.staff-admin]
+verify_jwt = true
