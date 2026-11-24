@@ -334,6 +334,12 @@ export interface ExpenseRow {
   attachment_path: string | null;
   recorded_by: string | null;
   created_at: string;
+  workflow_status: 'pending_approval' | 'approved' | 'rejected' | 'paid' | 'recorded';
+  approved_by: string | null;
+  approved_at: string | null;
+  approval_note: string | null;
+  paid_at: string | null;
+  updated_at: string;
 }
 
 /** `public.invoices`. */

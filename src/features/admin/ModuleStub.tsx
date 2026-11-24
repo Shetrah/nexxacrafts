@@ -145,7 +145,7 @@ export default function ModuleStub({ module }: { module: AdminModuleId }) {
     try {
       switch (module) {
         case 'inventory': await createInventoryItem({ name: entry.name ?? '', sku: entry.sku, category: entry.category, unit: entry.unit, quantity_on_hand: entry.quantity_on_hand || 0, reorder_level: entry.reorder_level || 0, average_cost: entry.average_cost || 0 }); break;
-        case 'expenses': await createExpense({ expense_date: entry.expense_date, category: entry.category ?? '', description: entry.description ?? '', amount: entry.amount ?? '', payment_account: entry.payment_account, reference: entry.reference }); break;
+        case 'expenses': await createExpense({ expense_date: entry.expense_date, category: entry.category ?? '', description: entry.description ?? '', amount: entry.amount ?? '', payment_account: entry.payment_account, reference: entry.reference, idempotency_key: `expense-${crypto.randomUUID()}` }); break;
         case 'projects': await createProject({ name: entry.name ?? '', project_type: entry.project_type, description: entry.description, due_date: entry.due_date, budget: entry.budget }); break;
         case 'sales': await submitQuote({ name: entry.name ?? '', email: entry.email ?? '', phone: entry.phone || '', serviceSlug: entry.serviceSlug ?? '', description: entry.description ?? '', configuration: {} }); break;
         case 'settings': await saveCompanySettings(Object.fromEntries((ENTRY_FORMS.settings?.fields ?? []).map((field) => [field.name, entry[field.name] ?? ''])), user.id); break;

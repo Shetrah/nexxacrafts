@@ -6,7 +6,7 @@ import type { ExpenseRow } from '@/types/db';
 import { cleanText, columnsOf, expectRow, expectRows, getClient, requireText, toDateOnly, toNumber } from './client';
 
 const EXPENSE_COLUMNS = columnsOf<ExpenseRow>()(
-  'id, expense_date, category, description, amount, payment_account, reference, attachment_path, recorded_by, created_at',
+  'id, expense_date, category, description, amount, payment_account, reference, attachment_path, recorded_by, created_at, workflow_status, approved_by, approved_at, approval_note, paid_at, updated_at',
 );
 
 /** Expense categories offered by the staff portal's expense form. */
@@ -57,6 +57,8 @@ export interface NewExpense {
   amount: number | string;
   payment_account?: string | null;
   reference?: string | null;
+  /** Reuse the same key when retrying a submission after a network timeout. */
+  idempotency_key: string;
 }
 
 /**
@@ -74,6 +76,16 @@ export async function createExpense(input: NewExpense): Promise<ExpenseRow> {
     payment_account: cleanText(input.payment_account),
     reference: cleanText(input.reference),
   };
-  const response = await client.from('expenses').insert(payload).select(EXPENSE_COLUMNS).single();
-  return expectRow<ExpenseRow>(response);
+  const response = await client.rpc('create_expense_record', {
+    p_expense_date: payload.expense_date,
+    p_category: payload.category,
+    p_description: payload.description,
+    p_amount: payload.amount,
+    p_payment_account: payload.payment_account,
+    p_reference: payload.reference,
+    p_idempotency_key: requireText(input.idempotency_key, 'Idempotency key'),
+  });
+  if (response.error) throw response.error;
+  const row = await client.from('expenses').select(EXPENSE_COLUMNS).eq('id', response.data).single();
+  return expectRow<ExpenseRow>(row);
 }

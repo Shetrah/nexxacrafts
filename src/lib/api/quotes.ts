@@ -79,6 +79,18 @@ export async function getQuote(id: string): Promise<QuoteRequestRow | null> {
   return expectMaybeRow<QuoteRequestRow>(response);
 }
 
+export interface ConvertedQuoteOrder { order_id: string; order_reference: string; invoice_id: string; invoice_number: string }
+
+/** Convert an accepted, account-linked quotation into its order and invoice atomically. */
+export async function convertAcceptedQuote(id: string): Promise<ConvertedQuoteOrder> {
+  const client = getClient();
+  const response = await client.rpc('convert_accepted_quote', { p_quote_id: id });
+  if (response.error) throw response.error;
+  const row = Array.isArray(response.data) ? response.data[0] : response.data;
+  if (!row?.order_id || !row?.invoice_id) throw new Error('The database did not return the created order and invoice.');
+  return row as ConvertedQuoteOrder;
+}
+
 /** Fields `updateQuoteFields` may change. Nothing else is ever sent. */
 export interface QuoteFieldsPatch {
   internal_notes?: string | null;

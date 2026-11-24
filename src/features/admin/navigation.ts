@@ -79,6 +79,7 @@ export type AdminModuleId =
   | 'pricing'
   | 'production'
   | 'inventory'
+  | 'procurement'
   | 'projects'
   | 'invoices'
   | 'payments'
@@ -130,6 +131,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   // Operations
   { id: 'production', label: 'Production', path: '/admin/production', icon: Factory, group: 'Operations', roles: [ 'admin', 'production_manager', 'print_operator', 'laser_operator', 'designer', 'developer'], description: 'Every department job queue, status and assignment.' },
   { id: 'inventory', label: 'Inventory', path: '/admin/inventory', icon: Boxes, group: 'Operations', roles: [ 'admin', 'production_manager', 'print_operator', 'laser_operator', 'finance'], description: 'Materials, blanks and consumables with reorder levels.' },
+  { id: 'procurement', label: 'Procurement', path: '/admin/procurement', icon: ClipboardList, group: 'Operations', roles: [ 'admin', 'finance', 'production_manager'], description: 'Supplier requests, purchase approvals, receipts and supplier payments.' },
   { id: 'projects', label: 'Projects & tasks', path: '/admin/projects', icon: FolderKanban, group: 'Operations', roles: [ 'admin', 'developer', 'designer', 'production_manager'], description: 'Client projects, milestones and team tasks.' },
 
   // Finance

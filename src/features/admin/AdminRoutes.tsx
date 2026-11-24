@@ -26,6 +26,7 @@ const PortfolioMediaPage = lazy(() => import('./portfolio/PortfolioMediaPage'));
 const PricingPage = lazy(() => import('./pricing/PricingPage'));
 const ProductionPage = lazy(() => import('./production/ProductionPage'));
 const InventoryPage = lazy(() => import('./inventory/InventoryPage'));
+const ProcurementPage = lazy(() => import('./procurement/ProcurementPage'));
 const ProjectsPage = lazy(() => import('./projects/ProjectsPage'));
 const InvoicesPage = lazy(() => import('./invoices/InvoicesPage'));
 const PaymentsPage = lazy(() => import('./payments/PaymentsPage'));
@@ -53,6 +54,7 @@ const MODULE_ROUTES: Array<{ path: string; module: AdminModuleId; Component: Laz
   { path: 'pricing', module: 'pricing', Component: PricingPage },
   { path: 'production', module: 'production', Component: ProductionPage },
   { path: 'inventory', module: 'inventory', Component: InventoryPage },
+  { path: 'procurement', module: 'procurement', Component: ProcurementPage },
   { path: 'projects', module: 'projects', Component: ProjectsPage },
   { path: 'invoices', module: 'invoices', Component: InvoicesPage },
   { path: 'payments', module: 'payments', Component: PaymentsPage },
