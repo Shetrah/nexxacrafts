@@ -38,15 +38,16 @@ export function calculateEstimate(slug: string, config: Record<string, string | 
   const qty = Number(config.quantity ?? 1);
   if (!Number.isFinite(qty) || qty <= 0) return null;
   if (slug === 'photo-mounting') {
+    const photoMountRate = rates.find(item => item.service_slug === slug && item.active);
     const size = String(config.mounting_size ?? '');
-    const selectedSizePrice = Number(fields.find(field => field.name === 'mounting_size')?.optionPrices?.[size] ?? 0);
+    const sizeField = fields.find(field => field.name === 'mounting_size');
+    const selectedSizePrice = Number(sizeField?.optionPrices?.[size] ?? 0);
     const finish = String(config.mounting_finish ?? '');
     const finishPrice = Number(fields.find(field => field.name === 'mounting_finish')?.optionPrices?.[finish] ?? 0);
-    // Require a size price or an active base rate; a priced finish by itself
-    // must not make an otherwise unpriced mount appear payable.
-    if (!(selectedSizePrice > 0) && !rate) return null;
-    const perMount = Number(rate?.unit_rate ?? 0) + Math.max(0, selectedSizePrice);
-    return roundCurrency((perMount + Math.max(0, finishPrice)) * qty + (rate?.setup_fee ?? 0));
+    // Photo mounting is priced by its selected size. Never add or fall back to
+    // a generic base rate, which could silently misprice a size at checkout.
+    if (!photoMountRate || !sizeField?.options?.includes(size) || !Number.isFinite(selectedSizePrice) || selectedSizePrice <= 0) return null;
+    return roundCurrency((selectedSizePrice + Math.max(0, finishPrice)) * qty);
   }
   let optionAddOn = 0;
   // Select option prices are service-field add-ons; the database RPC independently
