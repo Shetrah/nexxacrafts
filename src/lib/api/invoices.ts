@@ -20,7 +20,7 @@ import {
 } from './client';
 
 const INVOICE_COLUMNS = columnsOf<InvoiceRow>()(
-  'id, order_id, invoice_number, customer_name, customer_email, subtotal, tax, total, amount_paid, status, due_date, issued_at, sent_at, created_by, created_at',
+  'id, order_id, invoice_number, customer_name, customer_email, subtotal, tax, total, amount_paid, status, due_date, issued_at, sent_at, whatsapp_sent_at, created_by, created_at',
 );
 
 const BASE36 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';

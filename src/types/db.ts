@@ -358,6 +358,7 @@ export interface InvoiceRow {
   due_date: string | null;
   issued_at: string | null;
   sent_at: string | null;
+  whatsapp_sent_at: string | null;
   created_by: string | null;
   created_at: string;
 }

@@ -293,10 +293,19 @@ export default function OrdersPage() {
       if (whatsappError) console.error('Manual order saved, but WhatsApp notification failed.', whatsappError);
       else whatsappNotified = whatsappData?.ok === true;
       try {
-        await sendInvoiceEmail(String(row.invoice_id));
-        toast.success(`Order ${createdReference} was saved and its invoice emailed to ${manual.email}.${whatsappNotified ? ' WhatsApp notification sent to the team.' : ''}`);
+        const delivery = await sendInvoiceEmail(String(row.invoice_id));
+        const sentChannels = [delivery.emailSent ? 'email' : '', delivery.whatsappSent ? 'WhatsApp' : ''].filter(Boolean);
+        const failedChannels = [
+          !delivery.emailSent ? `Email: ${delivery.emailError || 'not accepted by Resend'}` : '',
+          !delivery.whatsappSent ? `WhatsApp: ${delivery.whatsappError || 'not accepted by provider'}` : '',
+        ].filter(Boolean);
+        if (failedChannels.length) {
+          toast.error(`Order ${createdReference} was saved. Invoice delivery was ${sentChannels.length ? 'partial' : 'not confirmed'} (${failedChannels.join(' · ')}). Retry it from Finance → Invoices.`);
+        } else {
+          toast.success(`Order ${createdReference} was saved and its invoice was sent by email and WhatsApp to ${manual.email} / ${manual.phone}.${whatsappNotified ? ' Team WhatsApp alert sent.' : ''}`);
+        }
       } catch (emailError) {
-        toast.error(`Order ${createdReference} was saved, but its invoice email failed: ${emailError instanceof Error ? emailError.message : 'Please resend it from Finance > Invoices.'}`);
+        toast.error(`Order ${createdReference} was saved, but invoice delivery failed: ${emailError instanceof Error ? emailError.message : 'Please retry it from Finance → Invoices.'}`);
       }
       setManualOpen(false);
       setManualStep('edit');

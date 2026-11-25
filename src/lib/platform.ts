@@ -87,7 +87,14 @@ export async function submitOrder(input: { name: string; email: string; phone: s
   return { id, reference, mode: 'demo', notificationSent: false };
 }
 
-export async function sendInvoiceEmail(invoiceId: string): Promise<{ emailSent: boolean; whatsappSent: boolean }> {
+export type InvoiceDeliveryResult = {
+  emailSent: boolean;
+  whatsappSent: boolean;
+  emailError?: string;
+  whatsappError?: string;
+};
+
+export async function sendInvoiceEmail(invoiceId: string): Promise<InvoiceDeliveryResult> {
   if (!supabase) throw new Error('Connect Supabase before sending an invoice email.');
   const { data, error } = await supabase.functions.invoke('contact-email', { body: { kind: 'invoice', invoiceId } });
   if (error) {
@@ -104,7 +111,12 @@ export async function sendInvoiceEmail(invoiceId: string): Promise<{ emailSent: 
   const emailSent = data?.invoiceEmailSent === true;
   const whatsappSent = data?.whatsappInvoiceSent === true;
   if (!emailSent && !whatsappSent) throw new Error(data?.error || 'Invoice delivery was not accepted by email or WhatsApp.');
-  return { emailSent, whatsappSent };
+  return {
+    emailSent,
+    whatsappSent,
+    emailError: typeof data?.invoiceEmailError === 'string' ? data.invoiceEmailError : undefined,
+    whatsappError: typeof data?.whatsappInvoiceError === 'string' ? data.whatsappInvoiceError : undefined,
+  };
 }
 
 export function getDemoRecords(kind: 'quotes' | 'orders') { return readDemo(DEMO_KEYS[kind]); }
