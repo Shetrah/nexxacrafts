@@ -20,7 +20,7 @@ export interface PaymentPdfLine {
 }
 
 export interface PaymentPdfDocument {
-  kind: 'invoice' | 'receipt';
+  kind: 'invoice' | 'receipt' | 'quotation';
   number: string;
   orderReference: string;
   customerName: string;
@@ -105,7 +105,9 @@ function pageHeader(canvas: ReturnType<typeof newCanvas>, document: PaymentPdfDo
   canvas.ops.push(`q 150 0 0 53 42 ${PAGE_HEIGHT - 72} cm /Logo Do Q`);
   text('DESIGN  /  PRINT  /  BUILD', 44, PAGE_HEIGHT - 91, 8, 'F2', SLATE);
   text(SITE_URL.replace('https://', ''), 44, PAGE_HEIGHT - 106, 7, 'F1', SLATE);
-  rightText(first ? (document.kind === 'invoice' ? 'CUSTOMER INVOICE' : 'PAYMENT RECEIPT') : (document.kind === 'invoice' ? 'INVOICE CONTINUED' : 'RECEIPT CONTINUED'), 553, PAGE_HEIGHT - 51, 14, 'F2', NAVY);
+  const documentLabel = document.kind === 'invoice' ? 'CUSTOMER INVOICE' : document.kind === 'receipt' ? 'PAYMENT RECEIPT' : 'CUSTOMER QUOTATION';
+  const continuedLabel = document.kind === 'invoice' ? 'INVOICE CONTINUED' : document.kind === 'receipt' ? 'RECEIPT CONTINUED' : 'QUOTATION CONTINUED';
+  rightText(first ? documentLabel : continuedLabel, 553, PAGE_HEIGHT - 51, 14, 'F2', NAVY);
   rightText(document.number, 553, PAGE_HEIGHT - 70, 8, 'F2', BLUE);
   if (!first) rightText(`PAGE ${pageNumber}`, 553, PAGE_HEIGHT - 88, 7, 'F1', SLATE);
   line(42, PAGE_HEIGHT - 126, 553, PAGE_HEIGHT - 126, [0.84, 0.88, 0.93], 0.8);
@@ -133,17 +135,17 @@ function beginPage(document: PaymentPdfDocument, first: boolean, pageNumber: num
     const { rect, line, text, rightText } = canvas;
     rect(42, 594, 511, 72, [0.975, 0.981, 0.992], [0.86, 0.89, 0.94]);
     rect(42, 594, 3, 72, BLUE);
-    sectionLabel(canvas, document.kind === 'invoice' ? 'Billed to' : 'Received from', 56, 650);
+    sectionLabel(canvas, document.kind === 'receipt' ? 'Received from' : 'Prepared for', 56, 650);
     text(document.customerName, 56, 630, 13, 'F2', NAVY);
     text(document.customerEmail, 56, 612, 8, 'F1', SLATE);
-    sectionLabel(canvas, document.kind === 'invoice' ? 'Order reference' : 'Payment reference', 350, 650);
+    sectionLabel(canvas, document.kind === 'receipt' ? 'Payment reference' : 'Order reference', 350, 650);
     rightText(document.orderReference, 539, 631, 8, 'F2', NAVY);
-    sectionLabel(canvas, document.kind === 'invoice' ? 'Invoice date' : 'Payment date', 350, 615);
+    sectionLabel(canvas, document.kind === 'invoice' ? 'Invoice date' : document.kind === 'receipt' ? 'Payment date' : 'Quotation date', 350, 615);
     rightText(document.date || new Date().toLocaleDateString('en-KE'), 539, 601, 8, 'F1', SLATE);
 
     const metaY = 573;
-    text(document.kind === 'invoice' ? 'DUE DATE' : 'PAYMENT METHOD', 53, metaY, 7, 'F2', SLATE);
-    text(document.kind === 'invoice' ? (document.dueDate || 'As agreed') : (document.paymentMethod || 'Confirmed').toUpperCase(), 53, metaY - 14, 9, 'F2', NAVY);
+    text(document.kind === 'invoice' ? 'DUE DATE' : document.kind === 'receipt' ? 'PAYMENT METHOD' : 'VALIDITY', 53, metaY, 7, 'F2', SLATE);
+    text(document.kind === 'invoice' ? (document.dueDate || 'As agreed') : document.kind === 'receipt' ? (document.paymentMethod || 'Confirmed').toUpperCase() : (document.dueDate || 'As agreed'), 53, metaY - 14, 9, 'F2', NAVY);
     if (document.kind === 'receipt') {
       text('PAYMENT REFERENCE', 315, metaY, 7, 'F2', SLATE);
       text(document.transactionReference || 'Confirmed', 315, metaY - 14, 8, 'F2', NAVY);
@@ -152,7 +154,7 @@ function beginPage(document: PaymentPdfDocument, first: boolean, pageNumber: num
     y = 515;
   } else y = 660;
 
-  sectionLabel(canvas, document.kind === 'invoice' ? 'Invoice details' : 'Payment details', 42, y + 23);
+  sectionLabel(canvas, document.kind === 'invoice' ? 'Invoice details' : document.kind === 'receipt' ? 'Payment details' : 'Quotation details', 42, y + 23);
   tableHeader(canvas, y);
   return { canvas, y: y - 22 };
 }
@@ -317,7 +319,7 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
     current.canvas.text('AMOUNT DUE', 54, totalTop - 47, 8, 'F2', NAVY);
     current.canvas.rightText(money(document.total), 540, totalTop - 47, 11, 'F2', BLUE);
     current.canvas.text(`Payment method: ${(document.paymentMethod || 'To be confirmed').toUpperCase()}`, 53, totalTop - 77, 7, 'F1', SLATE);
-  } else {
+  } else if (document.kind === 'receipt') {
     current.canvas.rightText('Invoice total', 435, totalTop, 8, 'F1', SLATE);
     current.canvas.rightText(money(document.total), 542, totalTop, 8, 'F2', NAVY);
     current.canvas.rightText('Payment received', 435, totalTop - 17, 8, 'F1', SLATE);
@@ -326,6 +328,11 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
     current.canvas.rect(42, totalTop - 57, 3, 29, BLUE);
     current.canvas.text('BALANCE DUE', 54, totalTop - 47, 8, 'F2', NAVY);
     current.canvas.rightText(money(document.balanceDue ?? 0), 540, totalTop - 47, 11, 'F2', BLUE);
+  } else {
+    current.canvas.rect(42, totalTop - 42, 511, 34, [0.91, 0.94, 0.99], [0.82, 0.87, 0.95]);
+    current.canvas.rect(42, totalTop - 42, 3, 34, BLUE);
+    current.canvas.text('QUOTED TOTAL', 54, totalTop - 29, 8, 'F2', NAVY);
+    current.canvas.rightText(money(document.total), 540, totalTop - 29, 12, 'F2', BLUE);
   }
 
   // Zapf Chancery plus a slight shear gives the manager's name a lighter, handwritten signature feel.
@@ -335,7 +342,7 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
   current.canvas.text('Manager, Nexxacrafts', 375, totalTop - 157, 7, 'F1', SLATE);
 
   current.canvas.line(42, 70, 553, 70, [0.84, 0.88, 0.93], 0.7);
-  current.canvas.text(document.kind === 'invoice' ? 'Thank you for choosing NexxaCraft.' : 'Payment received with thanks.', 42, 54, 8, 'F2', NAVY);
+  current.canvas.text(document.kind === 'invoice' ? 'Thank you for choosing NexxaCraft.' : document.kind === 'receipt' ? 'Payment received with thanks.' : 'Thank you for considering NexxaCraft.', 42, 54, 8, 'F2', NAVY);
   current.canvas.text('Design  /  Print  /  Build     nexxacrafts.co.ke     info@nexxacrafts.co.ke', 42, 39, 7, 'F1', SLATE);
   current.canvas.rightText(`PAGE ${pageNumber}`, 553, 39, 7, 'F1', SLATE);
   pages.push(`${current.canvas.ops.join('\n')}\n`);

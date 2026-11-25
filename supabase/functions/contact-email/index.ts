@@ -227,6 +227,112 @@ Deno.serve(async (request) => {
       return json({ok:true,revoked:true,orderDeleted:false},200,origin);
     } catch (error) { return json({error:error instanceof Error?error.message:'Could not revoke invoice.'},500,origin); }
   }
+  if (payload.kind === 'issued_quote') {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const authorization = request.headers.get('authorization');
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL');
+    const whatsappApiKey = Deno.env.get('WHATSAPP_API_KEY');
+    if (!supabaseUrl || !anonKey || !serviceKey || !authorization) return json({ error: 'A staff session is required to send an issued quotation.' }, 401, origin);
+    try {
+      const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
+      if (!authResponse.ok) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+      const actor = await authResponse.json() as { id?: string };
+      if (!actor.id) return json({ error: 'Your staff session could not be verified.' }, 401, origin);
+      const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${encodeURIComponent(actor.id)}&limit=1`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      const profiles = profileResponse.ok ? await profileResponse.json() : [];
+      if (!Array.isArray(profiles) || !['admin', 'sales', 'finance'].includes(profiles[0]?.role)) return json({ error: 'Admin, sales, or finance access is required to send quotations.' }, 403, origin);
+
+      const quoteId = typeof payload.quoteId === 'string' ? payload.quoteId : '';
+      if (!/^[0-9a-f-]{36}$/i.test(quoteId)) return json({ error: 'A valid quotation is required.' }, 400, origin);
+      const quoteResponse = await fetch(`${supabaseUrl}/rest/v1/quote_requests?select=id,reference,customer_name,email,phone,company,service_slug,description,configuration,status,quoted_amount,currency,created_at&id=eq.${encodeURIComponent(quoteId)}&limit=1`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+      if (!quoteResponse.ok) throw new Error(`Quotation lookup failed (${quoteResponse.status}).`);
+      const quoteRows = await quoteResponse.json();
+      const quote = Array.isArray(quoteRows) ? quoteRows[0] as Record<string, unknown> | undefined : undefined;
+      if (!quote) return json({ error: 'Quotation not found.' }, 404, origin);
+      if (quote.status !== 'quoted' || !Number.isFinite(Number(quote.quoted_amount)) || Number(quote.quoted_amount) <= 0) return json({ error: 'Save and issue a positive quotation amount before sending it.' }, 409, origin);
+
+      const recipient = asText(quote.email, 254);
+      const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
+      const phoneDigits = asText(quote.phone, 40).replace(/\D/g, '');
+      const whatsappRecipient = phoneDigits.startsWith('0') && phoneDigits.length === 10 ? `254${phoneDigits.slice(1)}` : phoneDigits.startsWith('254') && phoneDigits.length === 12 ? phoneDigits : phoneDigits.length === 9 ? `254${phoneDigits}` : '';
+      if ((!emailValid || !resendKey || !fromEmail) && (!whatsappRecipient || !whatsappApiKey)) return json({ error: 'No quotation delivery channel is ready. Check the client email/phone and Resend/WhatsApp configuration.' }, 400, origin);
+
+      const requestId = crypto.randomUUID();
+      const requestedChannels = [
+        ...(emailValid && resendKey && fromEmail ? [{ channel: 'email', recipient }] : []),
+        ...(whatsappRecipient && whatsappApiKey ? [{ channel: 'whatsapp', recipient: whatsappRecipient }] : []),
+      ];
+      const logs = new Map<string, string>();
+      for (const channel of requestedChannels) {
+        const logResponse = await fetch(`${supabaseUrl}/rest/v1/quote_delivery_logs`, { method: 'POST', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ quote_id: quoteId, request_id: requestId, channel: channel.channel, recipient: channel.recipient, status: 'pending', created_by: actor.id }) });
+        const logRows = logResponse.ok ? await logResponse.json() : null;
+        if (!logResponse.ok || !Array.isArray(logRows) || !logRows[0]?.id) throw new Error(`Could not create quotation delivery record (${logResponse.status}).`);
+        logs.set(channel.channel, String(logRows[0].id));
+      }
+
+      const quoteAmount = Number(quote.quoted_amount);
+      const quoteNumber = asText(quote.reference, 80);
+      const customerName = asText(quote.company, 160) || asText(quote.customer_name, 120);
+      const serviceLabel = asText(quote.service_slug, 120).replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+      const quotePdf = await createPaymentPdf({
+        kind: 'quotation', number: quoteNumber, orderReference: quoteNumber,
+        customerName, customerEmail: recipient,
+        date: new Date().toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' }),
+        dueDate: 'As agreed', lines: [{ description: serviceLabel, quantity: 1, amount: quoteAmount }],
+        subtotal: quoteAmount, tax: 0, total: quoteAmount,
+      });
+      const filename = `${quoteNumber.replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`;
+      const amountLabel = `KES ${quoteAmount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const brief = asText(quote.description, 1500);
+      const safeName = escapeHtml(customerName);
+      const safeRef = escapeHtml(quoteNumber);
+      const safeService = escapeHtml(serviceLabel);
+      const safeBrief = escapeHtml(brief).replace(/\r?\n/g, '<br>');
+      const siteUrl = (Deno.env.get('PUBLIC_SITE_URL') || 'https://nexxacrafts.co.ke').replace(/\/$/, '');
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">YOUR QUOTATION</div><h1 style="margin:9px 0;color:#111c32;font-size:26px">${safeRef}</h1><p style="color:#596780;line-height:1.6">Hello ${safeName}, your quotation for <strong>${safeService}</strong> is ready. The attached PDF contains the quotation details.</p><div style="margin:20px 0;padding:18px;border-radius:12px;background:#f0f4ff"><span style="font-size:11px;color:#68758b;text-transform:uppercase;letter-spacing:1px">Quoted amount</span><div style="margin-top:5px;color:#123bba;font-size:23px;font-weight:800">${amountLabel}</div></div>${brief ? `<p style="color:#596780;line-height:1.6"><strong>Project brief</strong><br>${safeBrief}</p>` : ''}<p style="color:#596780;line-height:1.6">Please review the attached quotation and contact our team if you would like to proceed or discuss any changes.</p></td></tr><tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">NexxaCraft · Design · Print · Build<br><a href="${escapeHtml(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      const textBody = `NexxaCraft quotation ${quoteNumber}\nClient: ${customerName}\nService: ${serviceLabel}\nQuoted amount: ${amountLabel}\n\n${brief ? `Project brief: ${brief}\n\n` : ''}Please review the attached PDF and contact NexxaCraft if you would like to proceed or discuss changes.`;
+      const results: Record<string, { sent: boolean; error?: string }> = {};
+      if (logs.has('email')) {
+        try {
+          const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: fromEmail, to: [recipient], reply_to: Deno.env.get('RESEND_REPLY_TO') || fromEmail, subject: `Quotation ${quoteNumber} · NexxaCraft`, text: textBody, html, attachments: [{ filename, content: pdfBase64(quotePdf) }] }) });
+          const responseText = await response.text();
+          const responseBody = (() => { try { return JSON.parse(responseText) as Record<string, unknown>; } catch { return {}; } })();
+          if (!response.ok) throw new Error(`Resend rejected quotation (${response.status}): ${asText(responseBody.message, 250) || responseText.slice(0, 250)}`);
+          await fetch(`${supabaseUrl}/rest/v1/quote_delivery_logs?id=eq.${encodeURIComponent(logs.get('email')!)}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'sent', provider_message_id: asText(responseBody.id, 180), sent_at: new Date().toISOString() }) });
+          results.email = { sent: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Email delivery failed.';
+          await fetch(`${supabaseUrl}/rest/v1/quote_delivery_logs?id=eq.${encodeURIComponent(logs.get('email')!)}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'failed', error: message.slice(0, 500) }) });
+          results.email = { sent: false, error: message };
+        }
+      }
+      if (logs.has('whatsapp')) {
+        try {
+          const mediaUrl = await uploadPaymentPdf(supabaseUrl, serviceKey, `quotations/${quoteId}/${requestId}.pdf`, quotePdf);
+          const response = await fetch('https://whatsy.elitesamttech.co.ke/api/v1/messages/media', { method: 'POST', headers: { 'X-API-Key': whatsappApiKey!, 'Content-Type': 'application/json' }, body: JSON.stringify({ to: whatsappRecipient, mimetype: 'application/pdf', mediaUrl, caption: `NexxaCraft quotation ${quoteNumber} for ${customerName}. Quoted amount: ${amountLabel}. Please review the attached PDF and reply if you would like to proceed.`, fileName: filename }) });
+          const responseText = await response.text();
+          const responseBody = (() => { try { return JSON.parse(responseText) as Record<string, unknown>; } catch { return {}; } })();
+          if (!response.ok || responseBody.success !== true) throw new Error(`WhatsApp rejected quotation (${response.status}): ${asText(responseBody.message || responseBody.error, 250) || responseText.slice(0, 250)}`);
+          await fetch(`${supabaseUrl}/rest/v1/quote_delivery_logs?id=eq.${encodeURIComponent(logs.get('whatsapp')!)}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'sent', provider_message_id: asText(responseBody.messageId, 180), sent_at: new Date().toISOString() }) });
+          results.whatsapp = { sent: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'WhatsApp delivery failed.';
+          await fetch(`${supabaseUrl}/rest/v1/quote_delivery_logs?id=eq.${encodeURIComponent(logs.get('whatsapp')!)}`, { method: 'PATCH', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'failed', error: message.slice(0, 500) }) });
+          results.whatsapp = { sent: false, error: message };
+        }
+      }
+      const emailSent = results.email?.sent === true;
+      const whatsappSent = results.whatsapp?.sent === true;
+      if (!emailSent && !whatsappSent) return json({ error: 'Quotation delivery failed on all configured channels.', emailError: results.email?.error, whatsappError: results.whatsapp?.error, requestId }, 502, origin);
+      return json({ ok: true, requestId, emailSent, whatsappSent, emailError: results.email?.error, whatsappError: results.whatsapp?.error }, 200, origin);
+    } catch (error) {
+      console.error('Issued quotation delivery failed', error);
+      return json({ error: error instanceof Error ? error.message : 'Could not send the issued quotation.' }, 500, origin);
+    }
+  }
   const kind = payload.kind === 'invoice' || payload.kind === 'checkout_invoice'
     ? 'invoice'
     : payload.kind === 'quote' ? 'quote' : payload.kind === 'order' ? 'order' : 'contact';

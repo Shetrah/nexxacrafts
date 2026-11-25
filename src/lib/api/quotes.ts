@@ -29,6 +29,19 @@ export { saveQuoteAmount, updateQuoteStatus } from '@/lib/platform';
  */
 export type QuoteSummary = Omit<QuoteRequestRow, 'description' | 'configuration' | 'internal_notes'>;
 
+export interface QuoteDeliveryLog {
+  id: string;
+  quote_id: string;
+  request_id: string;
+  channel: 'email' | 'whatsapp';
+  recipient: string;
+  status: 'pending' | 'sent' | 'failed';
+  provider_message_id: string | null;
+  error: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
 const QUOTE_SUMMARY_COLUMNS = columnsOf<QuoteSummary>()(
   'id, reference, customer_id, customer_name, email, phone, company, service_slug, status, quoted_amount, currency, assigned_to, created_at, updated_at',
 );
@@ -77,6 +90,17 @@ export async function getQuote(id: string): Promise<QuoteRequestRow | null> {
   const client = getClient();
   const response = await client.from('quote_requests').select(QUOTE_COLUMNS).eq('id', id).maybeSingle();
   return expectMaybeRow<QuoteRequestRow>(response);
+}
+
+/** All delivery attempts for a quotation, newest first. Staff-only through table RLS. */
+export async function listQuoteDeliveryLogs(quoteId: string): Promise<QuoteDeliveryLog[]> {
+  const client = getClient();
+  const response = await client.from('quote_delivery_logs')
+    .select('id,quote_id,request_id,channel,recipient,status,provider_message_id,error,sent_at,created_at')
+    .eq('quote_id', quoteId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  return expectRows<QuoteDeliveryLog>(response);
 }
 
 export interface ConvertedQuoteOrder { order_id: string; order_reference: string; invoice_id: string; invoice_number: string }
