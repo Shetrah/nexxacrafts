@@ -11,6 +11,10 @@ const writeDemo = (key: string, row: unknown) => localStorage.setItem(key, JSON.
 export async function submitQuote(input: { name: string; email: string; phone: string; company?: string; serviceSlug: string; description: string; configuration: Record<string, unknown>; }): Promise<RequestResult> {
   const reference = makeReference('NCQ');
   if (supabase) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error('Sign in with your registered client account before requesting a quotation.');
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      if (profile?.role !== 'customer') throw new Error('Only registered client accounts can request quotations.');
     const { data, error } = await supabase.functions.invoke('contact-email', {
       body: { kind: 'quote', reference, ...input },
     });
@@ -28,9 +32,7 @@ export async function submitQuote(input: { name: string; email: string; phone: s
     if (!data?.id || !data?.reference) throw new Error('Your request could not be saved. Please try again.');
     return { id: data.id, reference: data.reference, mode: 'live', notificationSent: data.notificationSent === true };
   }
-  const id = crypto.randomUUID();
-  writeDemo(DEMO_KEYS.quotes, { id, reference, ...input, status: 'submitted', created_at: new Date().toISOString() });
-  return { id, reference, mode: 'demo' };
+    throw new Error('Client accounts are required for quotation requests. Connect the account service and sign in to continue.');
 }
 
 export async function submitOrder(input: { name: string; email: string; phone: string; paymentMethod: 'mpesa' | 'bank' | 'card'; deliveryMethod: 'collection' | 'local_delivery' | 'courier'; deliveryAddress?: string; deliveryInstructions?: string; items: CartItem[]; notes?: string; }): Promise<RequestResult> {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Building2, CalendarDays, CheckCircle2, CircleDollarSign, Eye, EyeOff, KeyRound, Loader2, LogOut, Mail, MailCheck, PackageSearch, Pencil, Phone, Receipt, Save, ShieldCheck, UserRound } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Logo } from '../components/brand/Logo';
@@ -28,8 +28,12 @@ function authErrorMessage(error: unknown, mode: AuthMode): string {
 }
 
 const Account: React.FC = () => {
+  const navigate = useNavigate();
   const { user, profile, loading, signIn, signUp, resendSignupConfirmation, signOut, refreshProfile, requestPasswordReset, updatePassword } = useAuth();
-  const [mode, setMode] = useState<AuthMode>(() => new URLSearchParams(window.location.search).get('mode') === 'reset' ? 'reset' : 'signin');
+  const [mode, setMode] = useState<AuthMode>(() => {
+    const requestedMode = new URLSearchParams(window.location.search).get('mode');
+    return requestedMode === 'reset' || requestedMode === 'signup' ? requestedMode : 'signin';
+  });
   const [form, setForm] = useState({ name: '', email: '', phone: '', company: '', password: '' });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -130,6 +134,8 @@ const Account: React.FC = () => {
     try {
       if (mode === 'signin') {
         await signIn(form.email, form.password);
+        const requestedNext = new URLSearchParams(window.location.search).get('next');
+        if (requestedNext?.startsWith('/') && !requestedNext.startsWith('//')) navigate(requestedNext);
       } else if (mode === 'signup') {
         await signUp({ name: form.name, email: form.email, password: form.password, phone: form.phone, company: form.company });
         setConfirmationPending(true);

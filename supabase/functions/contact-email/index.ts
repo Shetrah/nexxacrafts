@@ -659,18 +659,33 @@ Deno.serve(async (request) => {
   let saved: Response;
   let emailMessage: string;
   if (kind === 'quote') {
+    const authorization = request.headers.get('authorization');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!authorization || !anonKey) return json({ error: 'Sign in with your registered client account before requesting a quotation.' }, 401, origin);
+    let quoteUser: { id?: string; email?: string; email_confirmed_at?: string | null };
+    try {
+      const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authorization } });
+      if (!userResponse.ok) return json({ error: 'Your client session could not be verified. Sign in and try again.' }, 401, origin);
+      quoteUser = await userResponse.json();
+    } catch {
+      return json({ error: 'Your client session could not be verified. Sign in and try again.' }, 401, origin);
+    }
+    if (!quoteUser.id || !quoteUser.email || !quoteUser.email_confirmed_at) {
+      return json({ error: 'Verify your client account email before requesting a quotation.' }, 403, origin);
+    }
+    if (email.toLowerCase() !== quoteUser.email.toLowerCase()) {
+      return json({ error: 'Use the email address registered to your signed-in client account.' }, 403, origin);
+    }
+    const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${encodeURIComponent(quoteUser.id)}&limit=1`, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+    });
+    const profileRows = profileResponse.ok ? await profileResponse.json() : [];
+    if (!Array.isArray(profileRows) || profileRows[0]?.role !== 'customer') {
+      return json({ error: 'Only registered client accounts can request quotations.' }, 403, origin);
+    }
     const reference = typeof payload.reference === 'string' && /^NCQ-[A-Z0-9-]{8,32}$/.test(payload.reference)
       ? payload.reference
       : `NCQ-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
-    let customerId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (authHeader && anonKey) {
-      try {
-        const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } });
-        if (userResponse.ok) customerId = (await userResponse.json()).id ?? null;
-      } catch { /* Guest quote requests are valid; keep customer_id null. */ }
-    }
     saved = await fetch(`${supabaseUrl}/rest/v1/quote_requests?select=id,reference`, {
       method: 'POST',
       headers: {
@@ -681,7 +696,7 @@ Deno.serve(async (request) => {
       },
       body: JSON.stringify({
         reference,
-        customer_id: customerId,
+        customer_id: quoteUser.id,
         customer_name: name,
         email,
         phone: phone || null,
