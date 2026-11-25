@@ -246,16 +246,35 @@ Deno.serve(async (request) => {
       authUser = await authResponse.json();
     } catch { return json({ error: 'Your customer session could not be verified. Please sign in again and retry invoice delivery.' }, 401, origin); }
     if (!authUser?.id) return json({ error: 'Your customer session could not be verified. Please sign in again and retry invoice delivery.' }, 401, origin);
+    let invoiceStage = 'validate invoice request';
     try {
       const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId : '';
       if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return json({ error: 'A valid invoice ID is required.' }, 400, origin);
-      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at,whatsapp_sent_at,email_pdf_version,whatsapp_pdf_version', id: `eq.${invoiceId}` });
+      invoiceStage = 'load invoice';
+      const invoiceQuery = new URLSearchParams({ select: 'id,order_id,invoice_number,customer_name,customer_email,subtotal,tax,total,amount_paid,status,due_date,issued_at,sent_at', id: `eq.${invoiceId}` });
       const invoiceResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${invoiceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
-      if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}).`);
+      if (!invoiceResponse.ok) throw new Error(`Invoice lookup failed (${invoiceResponse.status}): ${(await invoiceResponse.text()).slice(0, 500)}`);
       const invoices = await invoiceResponse.json();
       const invoice = Array.isArray(invoices) ? invoices[0] : null;
       if (!invoice) return json({ error: 'Invoice not found.' }, 404, origin);
       if (invoice.status === 'draft' || invoice.status === 'void') return json({ error: 'Issue the invoice before sending it.' }, 409, origin);
+      // Delivery columns were added by a later migration. Keep them out of the
+      // core invoice lookup so an unapplied optional-column migration cannot
+      // prevent the actual invoice from being sent.
+      invoiceStage = 'load optional invoice delivery status';
+      let deliveryMeta: Record<string, unknown> = {};
+      try {
+        const metadataQuery = new URLSearchParams({ select: 'whatsapp_sent_at,email_pdf_version,whatsapp_pdf_version', id: `eq.${invoiceId}` });
+        const metadataResponse = await fetch(`${supabaseUrl}/rest/v1/invoices?${metadataQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        if (metadataResponse.ok) {
+          const metadataRows = await metadataResponse.json();
+          deliveryMeta = Array.isArray(metadataRows) && metadataRows[0] ? metadataRows[0] as Record<string, unknown> : {};
+        } else {
+          console.warn('Invoice delivery metadata is unavailable; proceeding with delivery and retryable status tracking.', metadataResponse.status, (await metadataResponse.text()).slice(0, 300));
+        }
+      } catch (error) {
+        console.warn('Invoice delivery metadata lookup failed; proceeding with delivery.', error instanceof Error ? error.message : 'unknown error');
+      }
       let invoicePhone = '';
       let invoicePaymentMethod = '';
       let invoiceOrderReference = '';
@@ -271,9 +290,9 @@ Deno.serve(async (request) => {
         invoicePaymentMethod = asText(order.payment_method, 40);
         invoiceOrderReference = asText(order.reference, 60);
       }
-      const emailPdfCurrent = Number(invoice.email_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
-      const whatsappPdfCurrent = Number(invoice.whatsapp_pdf_version || 1) >= PAYMENT_PDF_DESIGN_VERSION;
-      if (payload.kind === 'checkout_invoice' && invoice.sent_at && invoice.whatsapp_sent_at && emailPdfCurrent && whatsappPdfCurrent) return json({ ok: true, invoiceEmailSent: true, whatsappInvoiceSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
+      const emailPdfCurrent = Number(deliveryMeta.email_pdf_version || 0) >= PAYMENT_PDF_DESIGN_VERSION;
+      const whatsappPdfCurrent = Number(deliveryMeta.whatsapp_pdf_version || 0) >= PAYMENT_PDF_DESIGN_VERSION;
+      if (payload.kind === 'checkout_invoice' && invoice.sent_at && deliveryMeta.whatsapp_sent_at && emailPdfCurrent && whatsappPdfCurrent) return json({ ok: true, invoiceEmailSent: true, whatsappInvoiceSent: true, alreadySent: true, invoiceNumber: invoice.invoice_number }, 200, origin);
       const recipient = asText(invoice.customer_email, 254);
       const validRecipient = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
       const emailConfigured = Boolean(resendKey && fromEmail && validRecipient);
@@ -348,6 +367,7 @@ Deno.serve(async (request) => {
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
       const trackingButton = trackingUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(trackingUrl)}" style="display:inline-block;border:1px solid #ccd7eb;border-radius:9px;padding:12px 20px;color:#183db7;text-decoration:none;font-size:14px;font-weight:700">Track your order status</a><p style="font-size:11px;color:#76839a">Use your order reference to check progress any time.</p></td></tr>` : '';
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      invoiceStage = 'send invoice email';
       let invoiceEmailSent = Boolean(invoice.sent_at && payload.kind === 'checkout_invoice' && emailPdfCurrent);
       let invoiceEmailError = '';
       if (validRecipient && !invoiceEmailSent && emailConfigured) {
@@ -369,7 +389,8 @@ Deno.serve(async (request) => {
         invoiceEmailError = 'Email service is not configured; WhatsApp delivery will be attempted.';
       }
 
-      let whatsappInvoiceSent = Boolean(invoice.whatsapp_sent_at && payload.kind === 'checkout_invoice' && whatsappPdfCurrent);
+      invoiceStage = 'send invoice WhatsApp';
+      let whatsappInvoiceSent = Boolean(deliveryMeta.whatsapp_sent_at && payload.kind === 'checkout_invoice' && whatsappPdfCurrent);
       let whatsappInvoiceError = whatsappInvoiceSent ? '' : whatsappApiKey ? '' : 'WhatsApp delivery is not configured. Set WHATSAPP_API_KEY in Supabase Edge Function secrets.';
       if (whatsappApiKey && invoicePhone && !whatsappInvoiceSent) {
         const digits = invoicePhone.replace(/\D/g, '');
@@ -399,8 +420,9 @@ Deno.serve(async (request) => {
       }
       return json({ ok: true, invoiceEmailSent, whatsappInvoiceSent, invoiceEmailError: invoiceEmailError || undefined, whatsappInvoiceError: whatsappInvoiceError || undefined, invoiceNumber: invoice.invoice_number }, 200, origin);
     } catch (error) {
-      console.error('Could not send invoice email', error);
-      return json({ error: error instanceof Error ? error.message : 'Could not send invoice email.' }, 500, origin);
+      const message = error instanceof Error ? error.message : 'Could not send invoice email.';
+      console.error('Invoice delivery failed', { stage: invoiceStage, message });
+      return json({ error: `${message} (stage: ${invoiceStage})` }, 500, origin);
     }
   }
   if (kind === 'order') {
