@@ -414,27 +414,57 @@ Deno.serve(async (request) => {
       let textItems = '';
       let invoicePdfLines: PaymentPdfLine[] = [];
       if (invoice.order_id) {
-        const itemsQuery = new URLSearchParams({ select: 'service_name,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
+        const itemsQuery = new URLSearchParams({ select: 'service_name,service_slug,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
         const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
         if (!itemsResponse.ok) throw new Error(`Invoice order details lookup failed (${itemsResponse.status}).`);
         const invoiceItems = await itemsResponse.json();
         const validInvoiceItems = Array.isArray(invoiceItems) ? invoiceItems as Array<Record<string, unknown>> : [];
         
-        // Extract delivery fee from configuration
+        // Extract delivery fee and design assistance pricing from configuration
         let deliveryFee = 0;
+        let designFee = 0;
+        let designServiceName = '';
+        
         for (const item of validInvoiceItems) {
           const config = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
             ? item.configuration as Record<string, unknown> : {};
+          
+          // Get delivery fee
           const fee = Number(config.delivery_fee || 0);
-          if (fee > 0) {
-            deliveryFee = fee;
-            break; // Only use the first delivery fee found
+          if (fee > 0) deliveryFee = fee;
+          
+          // Get design assistance fee if artwork status is "Need design assistance"
+          if (config.artwork === 'Need design assistance' && config.design_service) {
+            // Fetch the service fields to get option prices
+            const serviceSlug = asText(item.service_slug, 100);
+            if (serviceSlug) {
+              const serviceQuery = new URLSearchParams({ select: 'fields', slug: `eq.${serviceSlug}`, limit: '1' });
+              const serviceResponse = await fetch(`${supabaseUrl}/rest/v1/services?${serviceQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+              if (serviceResponse.ok) {
+                const services = await serviceResponse.json();
+                const service = Array.isArray(services) ? services[0] : null;
+                if (service?.fields && Array.isArray(service.fields)) {
+                  const designField = service.fields.find((f: any) => f.name === 'design_service');
+                  if (designField?.optionPrices) {
+                    const selectedDesign = String(config.design_service);
+                    designFee = Number(designField.optionPrices[selectedDesign] || 0);
+                    designServiceName = selectedDesign;
+                  }
+                }
+              }
+            }
           }
         }
         
         invoicePdfLines = validInvoiceItems.map(item => {
           const quantity = Number(item.quantity) || 1;
-          const amount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+          const totalAmount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+          // Extract delivery fee and design fee from configuration
+          const config = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+            ? item.configuration as Record<string, unknown> : {};
+          const itemDeliveryFee = Number(config.delivery_fee || 0);
+          // Subtract both delivery and design fees from the item amount since they're included in confirmed_amount
+          const amount = totalAmount - itemDeliveryFee - designFee;
           return {
             description: invoiceItemName(item),
             quantity,
@@ -442,6 +472,16 @@ Deno.serve(async (request) => {
             unitAmount: amount / quantity,
           };
         });
+        
+        // Add design assistance as a separate line item if present
+        if (designFee > 0 && designServiceName) {
+          invoicePdfLines.push({
+            description: `Design Assistance - ${designServiceName}`,
+            quantity: 1,
+            amount: designFee,
+            unitAmount: designFee,
+          });
+        }
         
         // Add delivery fee as a separate line item if present
         if (deliveryFee > 0) {
@@ -454,18 +494,33 @@ Deno.serve(async (request) => {
         }
         
         itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
-          const amount = item.confirmed_amount ?? item.estimated_amount;
+          const totalAmount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
           const quantity = Number(item.quantity) || 1;
-          const unitPrice = Number(amount) / quantity;
+          // Extract delivery fee from configuration
+          const config = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+            ? item.configuration as Record<string, unknown> : {};
+          const itemDeliveryFee = Number(config.delivery_fee || 0);
+          // Subtract both fees from the item amount
+          const amount = totalAmount - itemDeliveryFee - designFee;
+          const unitPrice = amount / quantity;
           const itemName = invoiceItemName(item);
           textItems += `${itemName} × ${quantity} @ ${currency(unitPrice)} = ${currency(amount)}\n`;
           return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(itemName)}</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${quantity}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(unitPrice)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
         }).join('');
         
+        let rowIndex = validInvoiceItems.length;
+        
+        // Add design assistance row to email HTML if present
+        if (designFee > 0 && designServiceName) {
+          textItems += `Design Assistance - ${designServiceName} × 1 @ ${currency(designFee)} = ${currency(designFee)}\n`;
+          itemRows += `<tr style="background:${rowIndex % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>Design Assistance - ${esc(designServiceName)}</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">1</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(designFee)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(designFee)}</td></tr>`;
+          rowIndex++;
+        }
+        
         // Add delivery fee row to email HTML if present
         if (deliveryFee > 0) {
           textItems += `Delivery Fee × 1 @ ${currency(deliveryFee)} = ${currency(deliveryFee)}\n`;
-          itemRows += `<tr style="background:${validInvoiceItems.length % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>Delivery Fee</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">1</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td></tr>`;
+          itemRows += `<tr style="background:${rowIndex % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>Delivery Fee</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">1</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td></tr>`;
         }
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
