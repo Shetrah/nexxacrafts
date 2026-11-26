@@ -457,7 +457,7 @@ Deno.serve(async (request) => {
         }
         
         // Calculate subtotal (excluding ONLY delivery fee, design stays in items)
-        const subtotalAmount = Number(invoice.subtotal || 0) - deliveryFee;
+        const subtotalAmount = Number(invoice.total || 0) - deliveryFee;
         
         // Build line items - subtract delivery fee but NOT design fee
         invoicePdfLines = validInvoiceItems.map(item => {
