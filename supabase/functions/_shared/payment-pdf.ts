@@ -29,8 +29,6 @@ export interface PaymentPdfDocument {
   dueDate?: string;
   lines: PaymentPdfLine[];
   subtotal?: number;
-  designFee?: number;
-  designServiceName?: string;
   deliveryFee?: number;
   tax?: number;
   total: number;
@@ -320,15 +318,7 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
     
     let currentY = totalTop - 17;
     
-    // Add design fee if present
-    if (document.designFee && document.designFee > 0) {
-      const designLabel = document.designServiceName ? `Design - ${document.designServiceName}` : 'Design Assistance';
-      current.canvas.rightText(designLabel, 435, currentY, 8, 'F1', SLATE);
-      current.canvas.rightText(money(document.designFee), 542, currentY, 8, 'F2', NAVY);
-      currentY -= 17;
-    }
-    
-    // Add delivery fee if present
+    // Add delivery fee if present (below subtotal)
     if (document.deliveryFee && document.deliveryFee > 0) {
       current.canvas.rightText('Delivery Fee', 435, currentY, 8, 'F1', SLATE);
       current.canvas.rightText(money(document.deliveryFee), 542, currentY, 8, 'F2', NAVY);
