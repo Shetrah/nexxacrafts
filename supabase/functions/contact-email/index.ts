@@ -462,15 +462,13 @@ Deno.serve(async (request) => {
         // Calculate subtotal from invoice (already correct from database)
         subtotalAmount = Number(invoice.subtotal || invoice.total || 0);
         
-        // Build line items - DO NOT subtract delivery (it's not in item amounts)
-        // Extract design fee from the total item amount to show separately
-        const mainServiceAmount = validInvoiceItems.reduce((sum, item) => {
-          return sum + Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
-        }, 0) - deliveryFee - designFee;
+        // Calculate main service amount (subtotal minus design fee)
+        // Note: delivery is NOT in the item amounts, it's separate
+        const mainServiceAmount = subtotalAmount - designFee;
         
         invoicePdfLines = validInvoiceItems.map(item => {
           const quantity = Number(item.quantity) || 1;
-          // Use the amount minus design fee (design shown separately)
+          // Main service amount excludes design (shown separately)
           const amount = mainServiceAmount;
           return {
             description: invoiceItemName(item),
