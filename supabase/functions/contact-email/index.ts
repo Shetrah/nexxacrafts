@@ -413,6 +413,9 @@ Deno.serve(async (request) => {
       let itemRows = '';
       let textItems = '';
       let invoicePdfLines: PaymentPdfLine[] = [];
+      let deliveryFee = 0;
+      let subtotalAmount = Number(invoice.total || 0);
+      
       if (invoice.order_id) {
         const itemsQuery = new URLSearchParams({ select: 'service_name,service_slug,configuration,quantity,estimated_amount,confirmed_amount', order_id: `eq.${invoice.order_id}`, order: 'created_at.asc' });
         const itemsResponse = await fetch(`${supabaseUrl}/rest/v1/order_items?${itemsQuery}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
@@ -421,7 +424,7 @@ Deno.serve(async (request) => {
         const validInvoiceItems = Array.isArray(invoiceItems) ? invoiceItems as Array<Record<string, unknown>> : [];
         
         // Extract delivery fee and design assistance pricing from configuration
-        let deliveryFee = 0;
+        
         let designFee = 0;
         let designServiceName = '';
         
@@ -456,15 +459,19 @@ Deno.serve(async (request) => {
           }
         }
         
-        // Calculate subtotal (excluding ONLY delivery fee, design stays in items)
-        const subtotalAmount = Number(invoice.total || 0) - deliveryFee;
+        // Calculate subtotal from invoice (already correct from database)
+        subtotalAmount = Number(invoice.subtotal || invoice.total || 0);
         
-        // Build line items - subtract delivery fee but NOT design fee
+        // Build line items - DO NOT subtract delivery (it's not in item amounts)
+        // Extract design fee from the total item amount to show separately
+        const mainServiceAmount = validInvoiceItems.reduce((sum, item) => {
+          return sum + Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+        }, 0) - deliveryFee - designFee;
+        
         invoicePdfLines = validInvoiceItems.map(item => {
           const quantity = Number(item.quantity) || 1;
-          const totalAmount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
-          // Subtract ONLY delivery fee from the item amount
-          const amount = totalAmount - deliveryFee;
+          // Use the amount minus design fee (design shown separately)
+          const amount = mainServiceAmount;
           return {
             description: invoiceItemName(item),
             quantity,
@@ -485,10 +492,9 @@ Deno.serve(async (request) => {
         
         // Build HTML table rows for email
         itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
-          const totalAmount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
           const quantity = Number(item.quantity) || 1;
-          // Subtract ONLY delivery fee
-          const amount = totalAmount - deliveryFee;
+          // Main service amount (excluding design which is shown separately)
+          const amount = mainServiceAmount;
           const unitPrice = amount / quantity;
           const itemName = invoiceItemName(item);
           textItems += `${itemName} × ${quantity} @ ${currency(unitPrice)} = ${currency(amount)}\n`;
