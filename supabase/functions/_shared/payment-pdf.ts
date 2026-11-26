@@ -29,6 +29,9 @@ export interface PaymentPdfDocument {
   dueDate?: string;
   lines: PaymentPdfLine[];
   subtotal?: number;
+  designFee?: number;
+  designServiceName?: string;
+  deliveryFee?: number;
   tax?: number;
   total: number;
   amountPaid?: number;
@@ -314,13 +317,33 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
   if (document.kind === 'invoice') {
     current.canvas.rightText('Subtotal', 435, totalTop, 8, 'F1', SLATE);
     current.canvas.rightText(money(document.subtotal ?? document.total), 542, totalTop, 8, 'F2', NAVY);
-    current.canvas.rightText('Tax', 435, totalTop - 17, 8, 'F1', SLATE);
-    current.canvas.rightText(money(document.tax ?? 0), 542, totalTop - 17, 8, 'F2', NAVY);
-    current.canvas.rect(42, totalTop - 57, 511, 29, [0.91, 0.94, 0.99], [0.82, 0.87, 0.95]);
-    current.canvas.rect(42, totalTop - 57, 3, 29, BLUE);
-    current.canvas.text('AMOUNT DUE', 54, totalTop - 47, 8, 'F2', NAVY);
-    current.canvas.rightText(money(document.total), 540, totalTop - 47, 11, 'F2', BLUE);
-    current.canvas.text(`Payment method: ${(document.paymentMethod || 'To be confirmed').toUpperCase()}`, 53, totalTop - 77, 7, 'F1', SLATE);
+    
+    let currentY = totalTop - 17;
+    
+    // Add design fee if present
+    if (document.designFee && document.designFee > 0) {
+      const designLabel = document.designServiceName ? `Design - ${document.designServiceName}` : 'Design Assistance';
+      current.canvas.rightText(designLabel, 435, currentY, 8, 'F1', SLATE);
+      current.canvas.rightText(money(document.designFee), 542, currentY, 8, 'F2', NAVY);
+      currentY -= 17;
+    }
+    
+    // Add delivery fee if present
+    if (document.deliveryFee && document.deliveryFee > 0) {
+      current.canvas.rightText('Delivery Fee', 435, currentY, 8, 'F1', SLATE);
+      current.canvas.rightText(money(document.deliveryFee), 542, currentY, 8, 'F2', NAVY);
+      currentY -= 17;
+    }
+    
+    current.canvas.rightText('Tax', 435, currentY, 8, 'F1', SLATE);
+    current.canvas.rightText(money(document.tax ?? 0), 542, currentY, 8, 'F2', NAVY);
+    
+    const amountDueY = currentY - 40;
+    current.canvas.rect(42, amountDueY, 511, 29, [0.91, 0.94, 0.99], [0.82, 0.87, 0.95]);
+    current.canvas.rect(42, amountDueY, 3, 29, BLUE);
+    current.canvas.text('AMOUNT DUE', 54, amountDueY + 10, 8, 'F2', NAVY);
+    current.canvas.rightText(money(document.total), 540, amountDueY + 10, 11, 'F2', BLUE);
+    current.canvas.text(`Payment method: ${(document.paymentMethod || 'To be confirmed').toUpperCase()}`, 53, amountDueY - 20, 7, 'F1', SLATE);
   } else if (document.kind === 'receipt') {
     current.canvas.rightText('Invoice total', 435, totalTop, 8, 'F1', SLATE);
     current.canvas.rightText(money(document.total), 542, totalTop, 8, 'F2', NAVY);
