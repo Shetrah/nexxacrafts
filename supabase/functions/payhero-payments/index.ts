@@ -322,12 +322,17 @@ async function deliverPendingEmails(url: string, service: string, paymentId: unk
       ? new Date(String(paymentRecord.confirmed_at)).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })
       : new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }),
     lines: receiptItems.length
-      ? receiptItems.map(item => ({
-        description: receiptItemName(item) || 'Order item',
-        quantity: Number(item.quantity) || 1,
-        amount: Number(item.confirmed_amount ?? item.estimated_amount ?? 0),
-      }))
-      : [{ description: `Payment for invoice ${text(row.invoice_number, 80)}`, quantity: 1, amount }],
+      ? receiptItems.map(item => {
+          const quantity = Number(item.quantity) || 1;
+          const amount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+          return {
+            description: receiptItemName(item) || 'Order item',
+            quantity,
+            amount,
+            unitAmount: amount / quantity,
+          };
+        })
+      : [{ description: `Payment for invoice ${text(row.invoice_number, 80)}`, quantity: 1, amount, unitAmount: amount }],
     total: Number(row.invoice_total),
     amountPaid: amount,
     balanceDue: amountRemaining,

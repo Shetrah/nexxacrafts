@@ -419,6 +419,19 @@ Deno.serve(async (request) => {
         if (!itemsResponse.ok) throw new Error(`Invoice order details lookup failed (${itemsResponse.status}).`);
         const invoiceItems = await itemsResponse.json();
         const validInvoiceItems = Array.isArray(invoiceItems) ? invoiceItems as Array<Record<string, unknown>> : [];
+        
+        // Extract delivery fee from configuration
+        let deliveryFee = 0;
+        for (const item of validInvoiceItems) {
+          const config = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+            ? item.configuration as Record<string, unknown> : {};
+          const fee = Number(config.delivery_fee || 0);
+          if (fee > 0) {
+            deliveryFee = fee;
+            break; // Only use the first delivery fee found
+          }
+        }
+        
         invoicePdfLines = validInvoiceItems.map(item => {
           const quantity = Number(item.quantity) || 1;
           const amount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
@@ -429,13 +442,31 @@ Deno.serve(async (request) => {
             unitAmount: amount / quantity,
           };
         });
+        
+        // Add delivery fee as a separate line item if present
+        if (deliveryFee > 0) {
+          invoicePdfLines.push({
+            description: 'Delivery Fee',
+            quantity: 1,
+            amount: deliveryFee,
+            unitAmount: deliveryFee,
+          });
+        }
+        
         itemRows = validInvoiceItems.map((item: Record<string, unknown>, index: number) => {
           const amount = item.confirmed_amount ?? item.estimated_amount;
           const quantity = Number(item.quantity) || 1;
+          const unitPrice = Number(amount) / quantity;
           const itemName = invoiceItemName(item);
-          textItems += `${itemName} × ${quantity} — ${currency(amount)}\n`;
-          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(itemName)}</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${quantity}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
+          textItems += `${itemName} × ${quantity} @ ${currency(unitPrice)} = ${currency(amount)}\n`;
+          return `<tr style="background:${index % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>${esc(itemName)}</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">${quantity}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(unitPrice)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(amount)}</td></tr>`;
         }).join('');
+        
+        // Add delivery fee row to email HTML if present
+        if (deliveryFee > 0) {
+          textItems += `Delivery Fee × 1 @ ${currency(deliveryFee)} = ${currency(deliveryFee)}\n`;
+          itemRows += `<tr style="background:${validInvoiceItems.length % 2 ? '#f7f9ff' : '#fff'}"><td style="padding:12px;border-bottom:1px solid #e6ebf4"><strong>Delivery Fee</strong></td><td align="center" style="padding:12px;border-bottom:1px solid #e6ebf4">1</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td><td align="right" style="padding:12px;border-bottom:1px solid #e6ebf4;white-space:nowrap">${currency(deliveryFee)}</td></tr>`;
+        }
       }
       const dueDate = invoice.due_date ? new Date(`${invoice.due_date}T00:00:00`).toLocaleDateString('en-KE', { dateStyle: 'long' }) : 'As agreed';
       const siteUrl = (Deno.env.get('PUBLIC_SITE_URL') || 'https://nexxacrafts.co.ke').replace(/\/$/, '');
@@ -472,7 +503,7 @@ Deno.serve(async (request) => {
       const invoiceFilename = `${asText(invoice.invoice_number, 80).replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`;
       const payButton = paymentUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(paymentUrl)}" style="display:inline-block;border-radius:9px;background:#0341fc;padding:14px 24px;color:#fff;text-decoration:none;font-size:15px;font-weight:700">Pay invoice securely</a><p style="font-size:11px;color:#76839a">You’ll receive an M-Pesa prompt on your phone.</p></td></tr>` : '';
       const trackingButton = trackingUrl ? `<tr><td align="center" style="padding:0 30px 28px"><a href="${esc(trackingUrl)}" style="display:inline-block;border:1px solid #ccd7eb;border-radius:9px;padding:12px 20px;color:#183db7;text-decoration:none;font-size:14px;font-weight:700">Track your order status</a><p style="font-size:11px;color:#76839a">Use your order reference to check progress any time.</p></td></tr>` : '';
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="3" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"></head><body style="margin:0;padding:28px 12px;background:#edf2fa;color:#17243a;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border:1px solid #dce5f2;border-radius:16px;background:#fff;overflow:hidden"><tr><td style="height:5px;background:#0341fc"></td></tr><tr><td style="padding:24px 30px;background:#101b34"><div style="font-size:22px;font-weight:800"><span style="color:#fff">Nexxa</span><span style="color:#ef4444">CRAFT</span></div><div style="margin-top:5px;color:#b7c6e0;font-size:10px;letter-spacing:1.5px">DESIGN · PRINT · BUILD</div></td></tr><tr><td style="padding:28px 30px 10px"><div style="color:#0341fc;font-size:11px;font-weight:800;letter-spacing:1.5px">INVOICE</div><h1 style="margin:9px 0;color:#111c32;font-size:27px">${esc(invoice.invoice_number)}</h1><p style="color:#596780;line-height:1.6">Hello ${esc(invoice.customer_name)}, please find your invoice below. Due date: <strong>${esc(dueDate)}</strong>.</p></td></tr><tr><td style="padding:12px 30px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f2"><tr style="background:#f0f4fb"><th align="left" style="padding:11px">Description</th><th style="padding:11px">Qty</th><th align="right" style="padding:11px">Unit Price</th><th align="right" style="padding:11px">Amount</th></tr>${itemRows || `<tr><td colspan="4" style="padding:14px">Invoice details are available from our team.</td></tr>`}</table></td></tr><tr><td align="right" style="padding:16px 30px 24px"><div style="line-height:1.9;color:#53627a">Subtotal: <strong>${currency(invoice.subtotal)}</strong><br>Tax: <strong>${currency(invoice.tax)}</strong><br><span style="font-size:19px;color:#123bba;font-weight:800">Amount due: ${currency(dueAmount)}</span></div></td></tr>${payButton}${trackingButton}<tr><td style="padding:18px;background:#f7f9fc;text-align:center;color:#76839a;font-size:11px">Thank you for choosing NexxaCraft · <a href="${esc(siteUrl)}" style="color:#0341fc">nexxacrafts.co.ke</a></td></tr></table></td></tr></table></body></html>`;
       invoiceStage = 'send invoice email';
       let invoiceEmailSent = Boolean(invoice.sent_at && payload.kind === 'checkout_invoice' && emailPdfCurrent);
       let invoiceEmailError = '';

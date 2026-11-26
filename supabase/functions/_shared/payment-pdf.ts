@@ -122,7 +122,8 @@ function tableHeader(canvas: ReturnType<typeof newCanvas>, y: number) {
   rect(42, y - 8, 511, 24, [0.91, 0.94, 0.99], [0.83, 0.87, 0.94]);
   rect(42, y - 8, 3, 24, BLUE);
   text('DESCRIPTION', 53, y, 7, 'F2', NAVY);
-  rightText('QTY', 453, y, 7, 'F2', NAVY);
+  rightText('QTY', 390, y, 7, 'F2', NAVY);
+  rightText('UNIT PRICE', 465, y, 7, 'F2', NAVY);
   rightText('AMOUNT', 542, y, 7, 'F2', NAVY);
 }
 
@@ -288,14 +289,15 @@ export async function createPaymentPdf(document: PaymentPdfDocument) {
   };
 
   for (const item of document.lines) {
-    const descriptionLines = wrap(item.description, 58);
+    const descriptionLines = wrap(item.description, 42);
     const rowHeight = Math.max(28, descriptionLines.length * 11 + 10);
     if (current.y - rowHeight < 150) addPage();
     const yTop = current.y;
     current.canvas.rect(42, yTop - rowHeight + 5, 511, rowHeight, rowIndex % 2 ? [1, 1, 1] : [0.972, 0.979, 0.992]);
     current.canvas.text(descriptionLines[0], 53, yTop - 8, 8, 'F2', NAVY);
     descriptionLines.slice(1).forEach((line, index) => current.canvas.text(line, 53, yTop - 19 - index * 10, 7.5, 'F1', NAVY));
-    current.canvas.rightText(String(item.quantity || 1), 453, yTop - 9, 8, 'F1', NAVY);
+    current.canvas.rightText(String(item.quantity || 1), 390, yTop - 9, 8, 'F1', NAVY);
+    current.canvas.rightText(money(item.unitAmount ?? (item.amount / (item.quantity || 1))), 465, yTop - 9, 7.5, 'F1', NAVY);
     current.canvas.rightText(money(item.amount), 542, yTop - 9, 8, 'F2', NAVY);
     current.canvas.line(42, yTop - rowHeight + 5, 553, yTop - rowHeight + 5, [0.88, 0.91, 0.95], 0.45);
     current.y -= rowHeight;

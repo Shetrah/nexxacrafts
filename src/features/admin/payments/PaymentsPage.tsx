@@ -22,7 +22,7 @@ export default function PaymentsPage(){
       const orderId=order?.id||invoice.order_id;
       const itemQuery=orderId&&supabase?await supabase.from('order_items').select('service_name,configuration,quantity,confirmed_amount,estimated_amount').eq('order_id',orderId).order('created_at',{ascending:true}):null;
       if(itemQuery?.error)throw itemQuery.error;
-      const lines=itemQuery?.data?.length?itemQuery.data.map(item=>({description:receiptItemName(item.service_name,item.configuration),quantity:Number(item.quantity)||1,amount:Number(item.confirmed_amount??item.estimated_amount??0)})):[{description:`Invoice ${invoice.invoice_number}`,quantity:1,amount:Number(payment.amount||0)}];
+      const lines=itemQuery?.data?.length?itemQuery.data.map(item=>{const qty=Number(item.quantity)||1;const amt=Number(item.confirmed_amount??item.estimated_amount??0);return {description:receiptItemName(item.service_name,item.configuration),quantity:qty,amount:amt,unitAmount:amt/qty};}):[{description:`Invoice ${invoice.invoice_number}`,quantity:1,amount:Number(payment.amount||0),unitAmount:Number(payment.amount||0)}];
       const paymentMethod=String(payment.method).toLowerCase()==='bank'?'Bank':'M-Pesa';
       const rawReference=payment.transaction_reference||'';
       const transactionReference=rawReference&&!['confirmed','recorded by admin'].includes(rawReference.toLowerCase())?rawReference:payment.provider_reference||`${paymentMethod==='Bank'?'BANK':'MPESA'}-${payment.id.slice(0,8).toUpperCase()}`;

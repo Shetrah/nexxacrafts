@@ -1544,7 +1544,8 @@ html[data-theme='dark'] .admin-service-card .text-slate-600 { color:#aab7ca; }
 .checkout-print-billto strong { color:#142039; font-size:.7rem; }
 .checkout-print-billto span { overflow-wrap:anywhere; color:#68758a; font-size:.59rem; }
 .checkout-print-lines { margin-top:1rem; border-top:1px solid #dce2eb; }
-.checkout-print-line { display:grid; grid-template-columns:minmax(0,1fr) 2rem minmax(5rem,auto); gap:.4rem; border-bottom:1px dashed #e0e5ed; padding:.45rem 0; color:#34435b; font-size:.56rem; }
+.checkout-print-line { display:grid; grid-template-columns:minmax(0,1fr) 2rem 4.5rem minmax(5rem,auto); gap:.35rem; border-bottom:1px dashed #e0e5ed; padding:.45rem 0; color:#34435b; font-size:.56rem; }
+.checkout-print-line > span:nth-child(3),
 .checkout-print-line > span:last-child { text-align:right; }
 .checkout-print-line-detail { display:block; margin-top:.12rem; color:#718097; font-size:.48rem; font-weight:500; line-height:1.35; }
 html[data-theme='dark'] .invoice-payment-page { background:radial-gradient(ellipse at top,rgba(3,65,252,.18),transparent 52%),#0b1220; }
