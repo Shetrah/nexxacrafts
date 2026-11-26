@@ -17,6 +17,7 @@ export function CheckoutPrintout({
   amountPaid,
   subtotal,
   tax,
+  deliveryFee,
   paymentMethod,
   transactionReference,
 }: {
@@ -30,6 +31,7 @@ export function CheckoutPrintout({
   amountPaid?: number;
   subtotal?: number;
   tax?: number;
+  deliveryFee?: number;
   paymentMethod: string;
   transactionReference?: string;
 }) {
@@ -62,6 +64,7 @@ export function CheckoutPrintout({
             {lines.map((line,index)=><div className="checkout-print-line" key={`${line.description}-${index}`}><span>{line.description}</span><span>{line.quantity}</span><span>KES {(line.unitAmount ?? line.amount / line.quantity).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span><span>KES {line.amount.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>)}
           </div>
           {!isReceipt&&subtotal!==undefined&&<div className="checkout-print-payment"><span>Subtotal</span><strong>KES {subtotal.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
+          {!isReceipt&&deliveryFee!==undefined&&deliveryFee>0&&<div className="checkout-print-payment"><span>Delivery fee</span><strong>KES {deliveryFee.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
           {!isReceipt&&tax!==undefined&&<div className="checkout-print-payment"><span>Tax</span><strong>KES {tax.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
           <div className="checkout-print-total"><span>{amountLabel}</span><strong>KES {amount.toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
           <div className="checkout-print-payment"><span>Payment method</span><strong>{paymentMethod.toUpperCase()}</strong></div>

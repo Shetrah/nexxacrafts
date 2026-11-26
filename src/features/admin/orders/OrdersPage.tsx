@@ -424,7 +424,64 @@ export default function OrdersPage() {
     </Card>
 
     <Modal open={manualOpen} onClose={()=>{if(!manualSaving)setManualOpen(false);}} title={manualStep==='preview'?'Review invoice':'Enter a client order'} description={manualStep==='preview'?'Check the invoice details before saving the order and emailing it to the client.':'Record the client’s chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl">
-      {manualStep==='preview'&&selectedService ? <div className="space-y-5"><div className="rounded-xl border border-brand-100 bg-brand-50/70 p-4 text-sm text-brand-900">Preview only. The invoice number and tracking link will be assigned when you confirm and save.</div><CheckoutPrintout kind="invoice" number="Assigned when saved" orderReference="Assigned when saved" customerName={manual.name} customerEmail={manual.email} lines={[{description:selectedService.name,quantity:Number(manual.quantity)||1,amount:Number(manual.amount)||0,details:[...describeConfigurationFromFields(configuration,serviceFields).map(({label,value})=>`${label}: ${value}`),...(Number(manual.deliveryFee)>0?[`Delivery fee: KES ${Number(manual.deliveryFee).toFixed(2)}`]:[])]}]} subtotal={Number(manual.amount)||0} tax={0} total={(Number(manual.amount)||0)+(Number(manual.deliveryFee)||0)} paymentMethod={manual.paymentMethod}/><div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4"><button type="button" className="btn-outline" disabled={manualSaving} onClick={()=>{setManualStep('edit');setManualError('');}}>Back to edit</button><button type="button" disabled={manualSaving} onClick={()=>void createManualOrder()} className="btn-primary">{manualSaving?<Loader2 size={16} className="animate-spin"/>:<Plus size={16}/>} {manualSaving?'Saving order and emailing invoice…':'Confirm, save order & email invoice'}</button></div>{manualError&&<p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{manualError}</p>}</div> : <form id="manual-order-form" onSubmit={reviewManualOrder} className="space-y-6">
+      {manualStep==='preview'&&selectedService ? (() => {
+        // Extract design service fee if present
+        const designField = serviceFields.find(field => field.name === 'design_service');
+        const designServiceOption = configuration['design_service'] as string | undefined;
+        const designFee = designField && designServiceOption ? Number(designField.optionPrices?.[designServiceOption] ?? 0) : 0;
+        
+        // Calculate amounts
+        const serviceAmount = Number(manual.amount) || 0;
+        const deliveryFeeAmount = Number(manual.deliveryFee) || 0;
+        const subtotalAmount = serviceAmount; // Subtotal includes design fee (already in service amount)
+        
+        // Build invoice lines
+        const invoiceLines = [
+          {
+            description: selectedService.name,
+            quantity: Number(manual.quantity) || 1,
+            amount: serviceAmount - designFee, // Service amount without design
+          }
+        ];
+        
+        // Add design assistance as separate line item if present
+        if (designFee > 0 && designServiceOption) {
+          invoiceLines.push({
+            description: designServiceOption,
+            quantity: 1,
+            amount: designFee,
+          });
+        }
+        
+        return <div className="space-y-5">
+          <div className="rounded-xl border border-brand-100 bg-brand-50/70 p-4 text-sm text-brand-900">
+            Preview only. The invoice number and tracking link will be assigned when you confirm and save.
+          </div>
+          <CheckoutPrintout 
+            kind="invoice" 
+            number="Assigned when saved" 
+            orderReference="Assigned when saved" 
+            customerName={manual.name} 
+            customerEmail={manual.email} 
+            lines={invoiceLines}
+            subtotal={subtotalAmount} 
+            tax={0}
+            deliveryFee={deliveryFeeAmount}
+            total={subtotalAmount + deliveryFeeAmount} 
+            paymentMethod={manual.paymentMethod}
+          />
+          <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+            <button type="button" className="btn-outline" disabled={manualSaving} onClick={()=>{setManualStep('edit');setManualError('');}}>
+              Back to edit
+            </button>
+            <button type="button" disabled={manualSaving} onClick={()=>void createManualOrder()} className="btn-primary">
+              {manualSaving?<Loader2 size={16} className="animate-spin"/>:<Plus size={16}/>} 
+              {manualSaving?'Saving order and emailing invoice…':'Confirm, save order & email invoice'}
+            </button>
+          </div>
+          {manualError&&<p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{manualError}</p>}
+        </div>;
+      })()  : <form id="manual-order-form" onSubmit={reviewManualOrder} className="space-y-6">
         <section><h3 className="mb-3 font-semibold">Client details</h3><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Saved client<select className="form-control mt-1" value="" onChange={event=>{const client=customers.find(item=>item.id===event.target.value);if(client)setManual(current=>({...current,name:client.company_name?.trim()||client.display_name,email:client.email,phone:client.phone}));}}><option value="">Choose company or individual</option>{[...customers].sort((a,b)=>Number(Boolean(b.company_name?.trim()))-Number(Boolean(a.company_name?.trim()))).map(client=><option key={client.id} value={client.id}>{client.company_name?.trim()||client.display_name}{client.company_name?.trim()?` · ${client.display_name}`:''}</option>)}</select></label><label className="text-sm font-medium">Company or client name *<input required className="form-control mt-1" value={manual.name} onChange={event=>setManual(current=>({...current,name:event.target.value}))}/></label><label className="text-sm font-medium">Email address *<input required type="email" className="form-control mt-1" value={manual.email} onChange={event=>setManual(current=>({...current,email:event.target.value}))}/></label><label className="text-sm font-medium">Phone number *<input required className="form-control mt-1" value={manual.phone} onChange={event=>setManual(current=>({...current,phone:event.target.value}))}/></label></div></section>
         <section className="border-t border-line pt-5"><h3 className="mb-3 font-semibold">Service and order requirements</h3><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Service *<select required className="form-control mt-1" value={manual.serviceSlug} onChange={event=>{setManual(current=>({...current,serviceSlug:event.target.value,amount:''}));setConfiguration({});}}><option value="">Select a service</option>{catalog.filter(service=>service.is_active).map(service=><option key={service.slug} value={service.slug}>{service.name}</option>)}</select></label>
           {selectedService&&<><label className="text-sm font-medium">Quantity *<input required type="number" min="1" step="1" className="form-control mt-1" value={manual.quantity} onChange={event=>setManual(current=>({...current,quantity:event.target.value}))}/></label>{visibleManualFields.map(field=><div key={field.name} className={field.type==='textarea'?'sm:col-span-2':''}><label className="text-sm font-medium" htmlFor={`manual-${field.name}`}>{field.label}{field.required?' *':''}</label>{field.type==='select'?<select id={`manual-${field.name}`} required={field.required} className="form-control mt-1" value={String(configuration[field.name]??'')} onChange={event=>changeConfiguration(field.name,event.target.value)}><option value="">Select an option</option>{field.options?.map(option=><option key={option} value={option}>{option}{Number(field.optionPrices?.[option]??0)>0?` — +KES ${Number(field.optionPrices?.[option]).toLocaleString('en-KE')}`:''}</option>)}</select>:field.type==='textarea'?<textarea id={`manual-${field.name}`} required={field.required} className="form-control mt-1 min-h-24" value={String(configuration[field.name]??'')} placeholder={field.help??''} onChange={event=>changeConfiguration(field.name,event.target.value)}/>:field.type==='checkbox'?<input id={`manual-${field.name}`} type="checkbox" className="ml-2 mt-3 size-4 accent-brand-600" required={field.required} checked={Boolean(configuration[field.name])} onChange={event=>changeConfiguration(field.name,event.target.checked)}/>:<input id={`manual-${field.name}`} type={field.type==='number'?'number':'text'} min={field.min} step={field.step} required={field.required} className="form-control mt-1" value={String(configuration[field.name]??'')} placeholder={field.help??''} onChange={event=>changeConfiguration(field.name,field.type==='number'?Number(event.target.value):event.target.value)}/>}{field.help&&<p className="mt-1 text-xs text-slate-500">{field.help}</p>}</div>)}<p className="sm:col-span-2 rounded-lg border border-dashed border-line bg-slate-50 px-3 py-2 text-xs text-slate-600">File upload questions are skipped here. Record the preferences the client has already shared; their files are not requested again.</p></>}
