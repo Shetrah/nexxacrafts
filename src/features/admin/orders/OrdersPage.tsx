@@ -177,6 +177,7 @@ export default function OrdersPage() {
   const [manualSaving, setManualSaving] = useState(false);
   const [manualError, setManualError] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null); // Track if we're editing an existing order
   
   const [manual, setManual] = useState({ name: '', email: '', phone: '', serviceSlug: '', quantity: '1', amount: '', paymentMethod: 'mpesa', deliveryMethod: 'collection', deliveryAddress: '', notes: '', deliveryFee: '0' });
   const [configuration, setConfiguration] = useState<Record<string, string | number | boolean>>({});
@@ -263,6 +264,13 @@ export default function OrdersPage() {
 
   async function createManualOrder() {
     if (!selectedService || !supabase) return;
+    
+    // If we're in edit mode, call editOrder instead
+    if (editingOrderId) {
+      await editOrder();
+      return;
+    }
+    
     const orderConfiguration = { ...configuration, quantity: Number(manual.quantity) || 1 };
     const fee = manual.deliveryMethod === 'collection' ? 0 : Number(manual.deliveryFee || 0);
     const amount = Number(manual.amount) + fee;
@@ -315,6 +323,96 @@ export default function OrdersPage() {
     } catch (createError) {
       setManualError(createError instanceof Error ? createError.message : 'The manual order could not be saved.');
     } finally { setManualSaving(false); }
+  }
+
+  async function editOrder() {
+    if (!selectedService || !supabase || !editingOrderId) return;
+    
+    const orderConfiguration = { ...configuration, quantity: Number(manual.quantity) || 1 };
+    const fee = manual.deliveryMethod === 'collection' ? 0 : Number(manual.deliveryFee || 0);
+    
+    setManualSaving(true);
+    setManualError('');
+    
+    try {
+      const { data, error: updateError } = await supabase.rpc('update_admin_order', {
+        p_order_id: editingOrderId,
+        p_service_slug: selectedService.slug,
+        p_configuration: orderConfiguration,
+        p_quantity: Number(manual.quantity) || 1,
+        p_new_amount: Number(manual.amount),
+        p_new_delivery_fee: fee,
+        p_reason: 'Admin updated order details',
+      });
+      
+      if (updateError) throw updateError;
+      
+      const result = Array.isArray(data) ? data[0] : data;
+      if (!result?.order_reference) {
+        throw new Error('Order update did not return expected data.');
+      }
+      
+      toast.success(`Order ${result.order_reference} updated successfully. ${result.invoice_number ? `Invoice ${result.invoice_number} ready to resend.` : ''}`);
+      
+      setManualOpen(false);
+      setManualStep('edit');
+      setEditingOrderId(null);
+      setManual({ name: '', email: '', phone: '', serviceSlug: '', quantity: '1', amount: '', paymentMethod: 'mpesa', deliveryMethod: 'collection', deliveryAddress: '', notes: '', deliveryFee: '0' });
+      setConfiguration({});
+      setSearchParams({});  // Close detail modal
+      refresh();
+    } catch (error) {
+      setManualError(error instanceof Error ? error.message : 'Could not update order.');
+    } finally {
+      setManualSaving(false);
+    }
+  }
+
+  function startEditOrder(order: OrderBundle) {
+    if (!order.items.length) {
+      toast.error('Cannot edit order: no items found.');
+      return;
+    }
+    
+    const item = order.items[0];
+    const config = item.configuration && typeof item.configuration === 'object' && !Array.isArray(item.configuration)
+      ? item.configuration as Record<string, unknown> : {};
+    
+    // Extract delivery fee
+    const deliveryFee = Number(config.delivery_fee || 0);
+    
+    // Calculate service amount (total - delivery)
+    const totalAmount = Number(item.confirmed_amount ?? item.estimated_amount ?? 0);
+    const serviceAmount = totalAmount - deliveryFee;
+    
+    // Set up the form for editing
+    setEditingOrderId(order.order.id);
+    setManual({
+      name: order.order.customer_name,
+      email: order.order.customer_email,
+      phone: order.order.customer_phone,
+      serviceSlug: item.service_slug,
+      quantity: String(item.quantity || 1),
+      amount: String(serviceAmount),
+      paymentMethod: order.order.payment_method,
+      deliveryMethod: order.order.delivery_method,
+      deliveryAddress: order.order.delivery_address || '',
+      notes: order.order.customer_notes || '',
+      deliveryFee: String(deliveryFee),
+    });
+    
+    // Extract configuration (remove our internal fields)
+    const cleanConfig: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (key !== 'quantity' && key !== 'delivery_fee') {
+        cleanConfig[key] = value as string | number | boolean;
+      }
+    }
+    setConfiguration(cleanConfig);
+    
+    setManualOpen(true);
+    setManualStep('edit');
+    setManualError('');
   }
 
   async function deleteOrder(order: OrderRow) {
@@ -406,7 +504,7 @@ export default function OrdersPage() {
     <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-xl border border-line bg-white px-5 py-5 shadow-xs sm:px-6">
       <div className="absolute inset-y-0 left-0 w-1 bg-brand-600" />
       <div><div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.15em] text-brand-700"><span className="size-1.5 rounded-full bg-accent-600" />Commerce</div><h2 className="mt-1 text-2xl font-bold tracking-tight">Orders</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Review the client’s selections, specifications, files and delivery preferences for each order.</p></div>
-      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row"><label className="relative w-full sm:w-72"><span className="sr-only">Search orders</span><PackageSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input className="form-control pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer or reference" /></label><button type="button" onClick={()=>{setManualOpen(true);setManualError('');}} className="btn-primary shrink-0"><Plus size={16}/> Enter manual order</button></div>
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row"><label className="relative w-full sm:w-72"><span className="sr-only">Search orders</span><PackageSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input className="form-control pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer or reference" /></label><button type="button" onClick={()=>{setManualOpen(true);setManualError('');setEditingOrderId(null);}} className="btn-primary shrink-0"><Plus size={16}/> Enter manual order</button></div>
     </div>
     {error && <p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">{error}</p>}
     <Card>
@@ -423,7 +521,7 @@ export default function OrdersPage() {
       </div>)}</div>}
     </Card>
 
-    <Modal open={manualOpen} onClose={()=>{if(!manualSaving)setManualOpen(false);}} title={manualStep==='preview'?'Review invoice':'Enter a client order'} description={manualStep==='preview'?'Check the invoice details before saving the order and emailing it to the client.':'Record the client’s chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl">
+    <Modal open={manualOpen} onClose={()=>{if(!manualSaving){setManualOpen(false);setEditingOrderId(null);}}} title={manualStep==='preview'?'Review invoice': editingOrderId ? 'Edit order' : 'Enter a client order'} description={manualStep==='preview'?'Check the invoice details before saving the order and emailing it to the client.': editingOrderId ? 'Update the order details. The linked invoice will be updated and can be resent.' : 'Record the client's chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl"> description={manualStep==='preview'?'Check the invoice details before saving the order and emailing it to the client.':'Record the client’s chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl">
       {manualStep==='preview'&&selectedService ? (() => {
         // Extract design service fee if present
         const designField = serviceFields.find(field => field.name === 'design_service');
@@ -487,13 +585,13 @@ export default function OrdersPage() {
           {selectedService&&<><label className="text-sm font-medium">Quantity *<input required type="number" min="1" step="1" className="form-control mt-1" value={manual.quantity} onChange={event=>setManual(current=>({...current,quantity:event.target.value}))}/></label>{visibleManualFields.map(field=><div key={field.name} className={field.type==='textarea'?'sm:col-span-2':''}><label className="text-sm font-medium" htmlFor={`manual-${field.name}`}>{field.label}{field.required?' *':''}</label>{field.type==='select'?<select id={`manual-${field.name}`} required={field.required} className="form-control mt-1" value={String(configuration[field.name]??'')} onChange={event=>changeConfiguration(field.name,event.target.value)}><option value="">Select an option</option>{field.options?.map(option=><option key={option} value={option}>{option}{Number(field.optionPrices?.[option]??0)>0?` — +KES ${Number(field.optionPrices?.[option]).toLocaleString('en-KE')}`:''}</option>)}</select>:field.type==='textarea'?<textarea id={`manual-${field.name}`} required={field.required} className="form-control mt-1 min-h-24" value={String(configuration[field.name]??'')} placeholder={field.help??''} onChange={event=>changeConfiguration(field.name,event.target.value)}/>:field.type==='checkbox'?<input id={`manual-${field.name}`} type="checkbox" className="ml-2 mt-3 size-4 accent-brand-600" required={field.required} checked={Boolean(configuration[field.name])} onChange={event=>changeConfiguration(field.name,event.target.checked)}/>:<input id={`manual-${field.name}`} type={field.type==='number'?'number':'text'} min={field.min} step={field.step} required={field.required} className="form-control mt-1" value={String(configuration[field.name]??'')} placeholder={field.help??''} onChange={event=>changeConfiguration(field.name,field.type==='number'?Number(event.target.value):event.target.value)}/>}{field.help&&<p className="mt-1 text-xs text-slate-500">{field.help}</p>}</div>)}<p className="sm:col-span-2 rounded-lg border border-dashed border-line bg-slate-50 px-3 py-2 text-xs text-slate-600">File upload questions are skipped here. Record the preferences the client has already shared; their files are not requested again.</p></>}
         </div></section>
         <section className="grid gap-4 border-t border-line pt-5 sm:grid-cols-2"><h3 className="sm:col-span-2 font-semibold">Invoice and fulfilment</h3><label className="text-sm font-medium">Agreed amount (KES) *<input required type="number" min="0" step="0.01" className="form-control mt-1" value={manual.amount} onChange={event=>setManual(current=>({...current,amount:event.target.value}))}/><span className="mt-1 block text-xs font-normal text-slate-500">Instant pricing fills this from active rates; review or enter the amount agreed with the client.</span></label><label className="text-sm font-medium">Delivery fee (KES)<input type="number" min="0" step="0.01" disabled={manual.deliveryMethod==='collection'} className="form-control mt-1" value={manual.deliveryMethod==='collection'?'0':manual.deliveryFee} onChange={event=>setManual(current=>({...current,deliveryFee:event.target.value}))}/><span className="mt-1 block text-xs font-normal text-slate-500">Shows separately below subtotal on the invoice.</span></label><label className="text-sm font-medium">Preferred payment method<select className="form-control mt-1" value={manual.paymentMethod} onChange={event=>setManual(current=>({...current,paymentMethod:event.target.value}))}><option value="mpesa">M-Pesa</option><option value="bank">Bank</option></select></label><label className="text-sm font-medium">Delivery or collection<select className="form-control mt-1" value={manual.deliveryMethod} onChange={event=>setManual(current=>({...current,deliveryMethod:event.target.value,deliveryFee:event.target.value==='collection'?'0':current.deliveryFee}))}><option value="collection">Collect from us</option><option value="local_delivery">Local delivery</option><option value="courier">Courier</option></select></label>{manual.deliveryMethod!=='collection'&&<label className="text-sm font-medium">Delivery address *<input required className="form-control mt-1" value={manual.deliveryAddress} onChange={event=>setManual(current=>({...current,deliveryAddress:event.target.value}))}/></label>}<label className="text-sm font-medium sm:col-span-2">Order notes<textarea className="form-control mt-1 min-h-20" value={manual.notes} onChange={event=>setManual(current=>({...current,notes:event.target.value}))}/></label>{manualError&&<p role="alert" className="sm:col-span-2 rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{manualError}</p>}</section>
-        <div className="flex justify-end gap-2 border-t border-line pt-4"><button type="button" className="btn-outline" disabled={manualSaving} onClick={()=>setManualOpen(false)}>Cancel</button><button type="submit" form="manual-order-form" disabled={manualSaving||!selectedService} className="btn-primary">Preview invoice <ArrowRight size={16}/></button></div>
+        <div className="flex justify-end gap-2 border-t border-line pt-4"><button type="button" className="btn-outline" disabled={manualSaving} onClick={()=>{setManualOpen(false);setEditingOrderId(null);}}>Cancel</button><button type="submit" form="manual-order-form" disabled={manualSaving||!selectedService} className="btn-primary">{editingOrderId ? 'Update order & invoice' : 'Preview invoice'} <ArrowRight size={16}/></button></div>
       </form>}
     </Modal>
 
     {(selectedId || detailLoading) && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchParams({}); }}>
       <section role="dialog" aria-modal="true" aria-label="Order details" className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl border border-line bg-slate-50 shadow-2xl sm:rounded-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-white/95 px-5 py-4 backdrop-blur sm:px-7"><div><p className="text-[11px] font-bold uppercase tracking-[.15em] text-brand-700">Order details</p><h3 className="mt-1 text-lg font-bold">{selected?.order.reference ?? 'Loading…'}</h3></div><button type="button" onClick={() => setSearchParams({})} className="btn-outline btn-sm">Close</button></header>
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-white/95 px-5 py-4 backdrop-blur sm:px-7"><div><p className="text-[11px] font-bold uppercase tracking-[.15em] text-brand-700">Order details</p><h3 className="mt-1 text-lg font-bold">{selected?.order.reference ?? 'Loading…'}</h3></div><div className="flex gap-2">{selected && selected.order.status !== 'cancelled' && <button type="button" onClick={() => startEditOrder(selected)} className="btn-primary btn-sm">Edit order</button>}<button type="button" onClick={() => setSearchParams({})} className="btn-outline btn-sm">Close</button></div></header>
         <div className="p-4 sm:p-7">{detailLoading ? <div className="p-12 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 animate-spin text-brand-600" size={22} />Loading client order information…</div> : selected ? <><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><UserRound size={15} />Client</div><p className="mt-2 font-semibold">{selected.order.customer_name}</p><p className="break-all text-xs text-slate-500">{selected.order.customer_email}</p><p className="mt-1 text-xs text-slate-500">{selected.order.customer_phone}</p></div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><MapPin size={15} />Delivery preference</div><p className="mt-2 font-semibold">{humanize(selected.order.delivery_method)}</p><p className="mt-1 text-sm text-slate-600">{selected.order.delivery_address || 'Collection from us'}</p>{selected.order.delivery_instructions && <p className="mt-2 text-xs text-slate-500">{selected.order.delivery_instructions}</p>}</div><div className="rounded-xl border border-line bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><FileText size={15} />Order notes</div><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{selected.order.customer_notes || 'No additional order notes.'}</p></div></div><OrderArtworkShare order={selected.order}/><div className="mt-5"><OrderDetail bundle={selected} catalog={catalog} /></div></> : <p className="p-10 text-center text-sm text-slate-500">Order could not be loaded.</p>}</div>
       </section>
     </div>}
