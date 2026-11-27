@@ -87,8 +87,7 @@ BEGIN
       updated_at = now()
     WHERE id = v_invoice.id;
     
-    UPDATE public.payments
-    SET amount = v_new_total
+    DELETE FROM public.payments
     WHERE invoice_id = v_invoice.id AND status = 'pending';
     
     UPDATE public.invoices
