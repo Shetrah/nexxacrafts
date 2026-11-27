@@ -349,8 +349,14 @@ export default function OrdersPage() {
       });
       
       if (updateError) {
-        console.error('Update order error:', updateError);
-        throw new Error(updateError.message || updateError.hint || 'Failed to update order');
+        console.error('Update order error:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code,
+          full: updateError
+        });
+        throw new Error(updateError.message || updateError.details || updateError.hint || 'Failed to update order');
       }
       
       const result = Array.isArray(data) ? data[0] : data;
