@@ -328,7 +328,10 @@ export default function OrdersPage() {
   async function editOrder() {
     if (!selectedService || !supabase || !editingOrderId) return;
     
-    const orderConfiguration = { ...configuration, quantity: Number(manual.quantity) || 1 };
+    // Don't include quantity in configuration - it's a separate parameter
+    const orderConfiguration = { ...configuration };
+    delete orderConfiguration.quantity;
+    
     const fee = manual.deliveryMethod === 'collection' ? 0 : Number(manual.deliveryFee || 0);
     
     setManualSaving(true);
@@ -345,7 +348,10 @@ export default function OrdersPage() {
         p_reason: 'Admin updated order details',
       });
       
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Update order error:', updateError);
+        throw new Error(updateError.message || updateError.hint || 'Failed to update order');
+      }
       
       const result = Array.isArray(data) ? data[0] : data;
       if (!result?.order_reference) {
