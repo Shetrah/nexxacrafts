@@ -2,6 +2,9 @@
 -- Changes return columns from order_id/invoice_id to result_order_id/result_invoice_id
 -- Adds table aliases to all queries to prevent ambiguity
 
+-- Drop the existing function first since we're changing the return type
+DROP FUNCTION IF EXISTS public.update_admin_order(uuid, text, jsonb, integer, numeric, numeric, text);
+
 CREATE OR REPLACE FUNCTION public.update_admin_order(
   p_order_id uuid,
   p_service_slug text,
@@ -104,3 +107,6 @@ BEGIN
     v_new_total;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.update_admin_order(uuid, text, jsonb, integer, numeric, numeric, text) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.update_admin_order(uuid, text, jsonb, integer, numeric, numeric, text) TO authenticated;
