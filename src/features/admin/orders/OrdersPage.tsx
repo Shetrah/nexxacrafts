@@ -521,7 +521,7 @@ export default function OrdersPage() {
       </div>)}</div>}
     </Card>
 
-    <Modal open={manualOpen} onClose={()=>{if(!manualSaving){setManualOpen(false);setEditingOrderId(null);}}} title={manualStep==='preview' ? 'Review invoice' : editingOrderId ? 'Edit order' : 'Enter a client order'} description={manualStep==='preview' ? 'Check the invoice details before saving the order and emailing it to the client.' : editingOrderId ? 'Update the order details. The linked invoice will be updated and can be resent.' : 'Record the client's chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl">
+    <Modal open={manualOpen} onClose={()=>{if(!manualSaving){setManualOpen(false);setEditingOrderId(null);}}} title={manualStep==='preview' ? 'Review invoice' : editingOrderId ? 'Edit order' : 'Enter a client order'} description={manualStep==='preview' ? 'Check the invoice details before saving the order and emailing it to the client.' : editingOrderId ? 'Update the order details. The linked invoice will be updated and can be resent.' : 'Record the client\'s chosen service and requirements, then issue an invoice with a link to track progress.'} size="xl">
       {manualStep==='preview'&&selectedService ? (() => {
         // Extract design service fee if present
         const designField = serviceFields.find(field => field.name === 'design_service');
