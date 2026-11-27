@@ -10,8 +10,8 @@ CREATE OR REPLACE FUNCTION public.update_admin_order(
   p_new_delivery_fee numeric,
   p_reason text DEFAULT NULL
 ) RETURNS TABLE(
-  order_id uuid,
-  invoice_id uuid,
+  result_order_id uuid,
+  result_invoice_id uuid,
   order_reference text,
   invoice_number text,
   new_total numeric
@@ -38,7 +38,7 @@ BEGIN
   END IF;
   
   -- Get the order
-  SELECT * INTO v_order FROM public.orders WHERE id = p_order_id;
+  SELECT * INTO v_order FROM public.orders o WHERE o.id = p_order_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Order not found';
   END IF;
@@ -49,7 +49,7 @@ BEGIN
   END IF;
   
   -- Get the service
-  SELECT * INTO v_service FROM public.services WHERE slug = p_service_slug AND is_active;
+  SELECT * INTO v_service FROM public.services s WHERE s.slug = p_service_slug AND s.is_active;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Service not found or inactive: %', p_service_slug;
   END IF;
@@ -59,15 +59,15 @@ BEGIN
   v_new_total := p_new_amount + p_new_delivery_fee;
   
   -- Update order
-  UPDATE public.orders
+  UPDATE public.orders o
   SET
     subtotal = v_new_total,
     total = v_new_total,
     updated_at = now()
-  WHERE id = p_order_id;
+  WHERE o.id = p_order_id;
   
   -- Update order items - replace configuration and amounts
-  UPDATE public.order_items
+  UPDATE public.order_items oi
   SET
     service_slug = p_service_slug,
     service_name = v_service.name,
@@ -75,10 +75,10 @@ BEGIN
     quantity = p_quantity,
     estimated_amount = v_new_total,
     confirmed_amount = v_new_total
-  WHERE order_id = p_order_id;
+  WHERE oi.order_id = p_order_id;
   
   -- Update linked invoice if exists
-  SELECT * INTO v_invoice FROM public.invoices WHERE order_id = p_order_id LIMIT 1;
+  SELECT * INTO v_invoice FROM public.invoices i WHERE i.order_id = p_order_id LIMIT 1;
   
   IF FOUND THEN
     -- Cannot update paid invoices
@@ -86,24 +86,24 @@ BEGIN
       RAISE EXCEPTION 'Cannot edit order - linked invoice % is already paid', v_invoice.invoice_number;
     END IF;
     
-    UPDATE public.invoices
+    UPDATE public.invoices i
     SET
       subtotal = v_new_subtotal,
       total = v_new_total,
       updated_at = now()
-    WHERE id = v_invoice.id;
+    WHERE i.id = v_invoice.id;
     
     -- Update pending payments
-    UPDATE public.payments
+    UPDATE public.payments pm
     SET amount = v_new_total
-    WHERE invoice_id = v_invoice.id AND status = 'pending';
+    WHERE pm.invoice_id = v_invoice.id AND pm.status = 'pending';
     
     -- Clear sent timestamps so invoice can be resent with new details
-    UPDATE public.invoices
+    UPDATE public.invoices i2
     SET 
       sent_at = NULL,
       whatsapp_sent_at = NULL
-    WHERE id = v_invoice.id;
+    WHERE i2.id = v_invoice.id;
   END IF;
   
   -- Return updated order and invoice info
