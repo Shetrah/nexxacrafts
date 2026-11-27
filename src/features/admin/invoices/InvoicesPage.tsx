@@ -26,6 +26,11 @@ export default function InvoicesPage() {
   const [manualPaymentMethod, setManualPaymentMethod] = useState<'mpesa' | 'bank'>('mpesa');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  
+  // Edit invoice state
+  const [editingInvoice, setEditingInvoice] = useState<InvoiceRow | null>(null);
+  const [editForm, setEditForm] = useState({ subtotal: '', deliveryFee: '', tax: '', reason: '' });
+  const [editSaving, setEditSaving] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -151,6 +156,100 @@ export default function InvoicesPage() {
     finally { setActionId(''); }
   }
 
+  function startEditInvoice(invoice: InvoiceRow) {
+    if (invoice.status === 'paid') {
+      setError('Cannot edit a paid invoice.');
+      return;
+    }
+    setEditingInvoice(invoice);
+    // Calculate delivery fee from total - subtotal
+    const deliveryFee = Number(invoice.total) - Number(invoice.subtotal);
+    setEditForm({
+      subtotal: String(invoice.subtotal),
+      deliveryFee: String(deliveryFee >= 0 ? deliveryFee : 0),
+      tax: String(invoice.tax || 0),
+      reason: '',
+    });
+    setError('');
+    setNotice('');
+  }
+
+  async function saveEditInvoice(event: React.FormEvent) {
+    event.preventDefault();
+    if (!supabase || !editingInvoice) return;
+    
+    setEditSaving(true);
+    setError('');
+    setNotice('');
+    
+    try {
+      const subtotal = Number(editForm.subtotal);
+      const deliveryFee = Number(editForm.deliveryFee);
+      const tax = Number(editForm.tax);
+      
+      if (!Number.isFinite(subtotal) || subtotal < 0) {
+        throw new Error('Enter a valid subtotal amount.');
+      }
+      if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+        throw new Error('Enter a valid delivery fee.');
+      }
+      if (!Number.isFinite(tax) || tax < 0) {
+        throw new Error('Enter a valid tax amount.');
+      }
+      
+      const { data, error: updateError } = await supabase.rpc('update_admin_invoice', {
+        p_invoice_id: editingInvoice.id,
+        p_new_subtotal: subtotal,
+        p_new_delivery_fee: deliveryFee,
+        p_new_tax: tax,
+        p_reason: editForm.reason || null,
+      });
+      
+      if (updateError) throw updateError;
+      
+      const result = Array.isArray(data) ? data[0] : data;
+      if (!result?.success) {
+        throw new Error(result?.message || 'Invoice update failed.');
+      }
+      
+      setNotice(`Invoice ${editingInvoice.invoice_number} updated successfully. New total: ${money(subtotal + deliveryFee + tax)}`);
+      setEditingInvoice(null);
+      setEditForm({ subtotal: '', deliveryFee: '', tax: '', reason: '' });
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update invoice.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function deleteInvoice(invoice: InvoiceRow) {
+    if (!supabase || role !== 'admin') return;
+    const detail = invoice.amount_paid > 0
+      ? ` This invoice has ${money(invoice.amount_paid)} recorded as paid; payment ledger records will be retained.`
+      : '';
+    if (!window.confirm(`Permanently delete invoice ${invoice.invoice_number}?${detail}`)) return;
+    setActionId(invoice.id); setError(''); setNotice('');
+    try {
+      // Documents use stable object names. Remove the generated invoice and any receipt PDFs
+      // associated with its payment records before deleting the invoice row.
+      const paths = [`invoices/${invoice.id}.pdf`];
+      if (invoice.order_id) {
+        const { data: payments, error: paymentsError } = await supabase
+          .from('payments').select('id').eq('order_id', invoice.order_id);
+        if (paymentsError) throw paymentsError;
+        for (const payment of payments ?? []) paths.push(`receipts/${payment.id}.pdf`);
+      }
+      const { error: storageError } = await supabase.storage.from('payment-documents').remove(paths);
+      if (storageError) throw new Error(`Could not delete the invoice PDF files: ${storageError.message}`);
+      const { error: deleteError } = await supabase.rpc('delete_admin_invoice', { p_invoice_id: invoice.id });
+      if (deleteError) throw deleteError;
+      setNotice(`Invoice ${invoice.invoice_number} and its generated PDFs were deleted. Related payment ledger entries were retained.`);
+      await reload();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not delete invoice.'); }
+    finally { setActionId(''); }
+  }
+
   return <section className="space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-white p-5 shadow-xs sm:p-6"><div><p className="text-xs font-bold uppercase tracking-[.15em] text-brand-700">Finance</p><h2 className="mt-1 text-2xl font-bold">Invoices</h2><p className="mt-2 text-sm text-slate-600">Create, issue, and email invoices to customers. Resend an issued invoice whenever needed.</p></div><button type="button" onClick={()=>{setOpen((value)=>!value);setError('');setNotice('');}} className="btn-primary">{open?<X size={16}/>:<Plus size={16}/>} {open?'Close':'Create invoice'}</button></header>
     {error&&<p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{error}</p>}{notice&&<p role="status" className="rounded-lg border border-success-200 bg-success-50 p-3 text-sm text-success-800">{notice}</p>}
@@ -168,6 +267,7 @@ export default function InvoicesPage() {
       <div className="grid gap-2 border-t border-line pt-3 lg:col-span-2">
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" disabled={sendingId===invoice.id||invoice.status==='draft'||invoice.status==='void'} onClick={()=>void send(invoice)} className="btn-outline whitespace-nowrap">{sendingId===invoice.id?<Loader2 className="animate-spin" size={15}/>:<Mail size={15}/>} {invoice.sent_at||invoice.whatsapp_sent_at?'Resend invoice':'Send invoice'}</button>
+          {invoice.status!=='paid'&&invoice.status!=='void'&&<button type="button" onClick={()=>startEditInvoice(invoice)} className="btn-outline whitespace-nowrap">Edit amounts</button>}
           {invoice.status!=='paid'&&invoice.status!=='void'&&invoice.status!=='draft'&&<><label className="sr-only" htmlFor={`payment-method-${invoice.id}`}>Manual payment method</label><select id={`payment-method-${invoice.id}`} className="form-control w-auto min-w-32" value={manualPaymentMethod} onChange={event=>setManualPaymentMethod(event.target.value as 'mpesa'|'bank')}><option value="mpesa">M-Pesa</option><option value="bank">Bank</option></select><button type="button" disabled={actionId===invoice.id} onClick={()=>void markPaid(invoice)} className="btn-outline whitespace-nowrap">{actionId===invoice.id?<Loader2 className="animate-spin" size={15}/>:<Check size={15}/>} Mark paid</button></>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -177,5 +277,96 @@ export default function InvoicesPage() {
         </div>
       </div>
     </article>)}</div>}</div>
+    
+    {/* Edit Invoice Modal */}
+    {editingInvoice && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setEditingInvoice(null); }}>
+        <form onSubmit={saveEditInvoice} className="w-full max-w-lg rounded-xl border border-line bg-white p-6 shadow-2xl">
+          <h3 className="text-xl font-bold">Edit Invoice {editingInvoice.invoice_number}</h3>
+          <p className="mt-2 text-sm text-slate-600">Update amounts when client requests changes (e.g., different size, additional items). The invoice will be updated and can be resent.</p>
+          
+          <div className="mt-6 space-y-4">
+            <label className="text-sm font-semibold">
+              Subtotal (KES) *
+              <input
+                required
+                type="number"
+                min="0"
+                step="0.01"
+                className="form-control mt-1"
+                value={editForm.subtotal}
+                onChange={(e) => setEditForm({ ...editForm, subtotal: e.target.value })}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                Total of all line items (service + design assistance)
+              </span>
+            </label>
+            
+            <label className="text-sm font-semibold">
+              Delivery Fee (KES)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="form-control mt-1"
+                value={editForm.deliveryFee}
+                onChange={(e) => setEditForm({ ...editForm, deliveryFee: e.target.value })}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                Shown separately below subtotal on invoice
+              </span>
+            </label>
+            
+            <label className="text-sm font-semibold">
+              Tax (KES)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="form-control mt-1"
+                value={editForm.tax}
+                onChange={(e) => setEditForm({ ...editForm, tax: e.target.value })}
+              />
+            </label>
+            
+            <label className="text-sm font-semibold">
+              Reason for change (optional)
+              <textarea
+                className="form-control mt-1 min-h-20"
+                value={editForm.reason}
+                onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                placeholder="E.g., Client requested larger banner size"
+              />
+            </label>
+            
+            <div className="rounded-lg border border-brand-100 bg-brand-50 p-3 text-sm">
+              <p className="font-semibold text-brand-900">New Total</p>
+              <p className="mt-1 text-lg font-bold text-brand-700">
+                {money((Number(editForm.subtotal) || 0) + (Number(editForm.deliveryFee) || 0) + (Number(editForm.tax) || 0))}
+              </p>
+            </div>
+          </div>
+          
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => setEditingInvoice(null)}
+              disabled={editSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={editSaving}
+            >
+              {editSaving ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
+              {editSaving ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
   </section>;
 }
