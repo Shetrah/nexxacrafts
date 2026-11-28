@@ -10,7 +10,11 @@ import type { InvoiceRow, OrderRow } from '@/types/db';
 import { supabase } from '@/lib/supabase';
 
 type InvoiceForm = { order_id: string; customer_name: string; customer_email: string; subtotal: string; tax: string; total: string; due_date: string };
+type StandaloneInvoiceForm = { customer_name: string; customer_email: string; customer_phone: string; items: InvoiceLineItem[]; delivery_fee: string; tax: string; due_date: string; notes: string };
+type InvoiceLineItem = { description: string; quantity: string; rate: string; amount: number };
 const blank = (): InvoiceForm => ({ order_id: '', customer_name: '', customer_email: '', subtotal: '', tax: '0', total: '', due_date: '' });
+const blankStandalone = (): StandaloneInvoiceForm => ({ customer_name: '', customer_email: '', customer_phone: '', items: [{ description: '', quantity: '1', rate: '', amount: 0 }], delivery_fee: '0', tax: '0', due_date: '', notes: '' });
+const blankItem = (): InvoiceLineItem => ({ description: '', quantity: '1', rate: '', amount: 0 });
 const money = (amount: number) => `KES ${Number(amount).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function InvoicesPage() {
@@ -18,7 +22,10 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [form, setForm] = useState<InvoiceForm>(blank);
+  const [standaloneForm, setStandaloneForm] = useState<StandaloneInvoiceForm>(blankStandalone);
+  const [standaloneStep, setStandaloneStep] = useState<'edit' | 'preview'>('edit');
   const [open, setOpen] = useState(false);
+  const [standaloneOpen, setStandaloneOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState('');
